@@ -1,0 +1,72 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "TNB Calculator Setup",
+        "description": "Configure TNB Calculator integration",
+        "data": {
+          "import_entity": "Import Energy Entity",
+          "export_entity": "Export Energy Entity (Optional)",
+          "tou_enabled": "Enable Time of Use (ToU) calculations",
+          "calendarific_api_key": "Calendarific API Key (for holiday detection)"
+        }
+      },
+      "tou_config": {
+        "title": "ToU Configuration",
+        "description": "Configure Time of Use settings",
+        "data": {
+          "calendarific_api_key": "Calendarific API Key",
+          "country": "Country Code (e.g., MY for Malaysia)",
+          "year": "Year for holiday data"
+        }
+      }
+    },
+    "error": {
+      "import_entity_required": "Import entity is required",
+      "api_key_required_for_tou": "API key is required when ToU is enabled",
+      "invalid_api_key": "Invalid API key or unable to connect to Calendarific API"
+    },
+    "abort": {
+      "already_configured": "Device is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "TNB Calculator Options",
+        "description": "Configure TNB Calculator options",
+        "data": {
+          "import_entity": "Import Energy Entity",
+          "export_entity": "Export Energy Entity (Optional)",
+          "tou_enabled": "Enable Time of Use (ToU) calculations",
+          "calendarific_api_key": "Calendarific API Key (for holiday detection)",
+          "country": "Country Code (e.g., MY for Malaysia)",
+          "year": "Year for holiday data"
+        }
+      }
+    }
+  },
+  "title": "TNB Calculator",
+  "entity": {
+    "sensor": {
+      "total_cost": {
+        "name": "Total Cost"
+      },
+      "peak_cost": {
+        "name": "Peak Cost"
+      },
+      "off_peak_cost": {
+        "name": "Off Peak Cost"
+      },
+      "import_energy": {
+        "name": "Import Energy"
+      },
+      "export_energy": {
+        "name": "Export Energy"
+      },
+      "net_energy": {
+        "name": "Net Energy"
+      }
+    }
+  }
+}
