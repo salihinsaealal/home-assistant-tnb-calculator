@@ -5,13 +5,11 @@ from typing import Any, Dict, Optional
 
 import voluptuous as vol
 
-from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity
+from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity, SensorDeviceClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_NAME,
-    DEVICE_CLASS_ENERGY,
-    DEVICE_CLASS_MONETARY,
-    ENERGY_KILO_WATT_HOUR,
+    UnitOfEnergy,
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
@@ -51,7 +49,6 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Required(CONF_IMPORT_ENTITY): cv.entity_id,
         vol.Optional(CONF_EXPORT_ENTITY): cv.entity_id,
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
-        vol.Optional(CONF_TOU_ENABLED, default=False): cv.boolean,
         vol.Optional(CONF_CALENDARIFIC_API_KEY): cv.string,
         vol.Optional(CONF_COUNTRY, default="MY"): cv.string,
         vol.Optional(CONF_YEAR): cv.year,
