@@ -82,7 +82,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.0.3",
+        sw_version="3.0.4",
     )
 
     sensors = [
@@ -642,9 +642,9 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry_id)},
             "name": DEFAULT_NAME,
-            "manufacturer": "Tenaga Nasional Berhad",
+            "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "3.0.0",
+            "sw_version": "3.0.4",
         }
 
     @property
