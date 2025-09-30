@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 
 import voluptuous as vol
 
-from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity, SensorDeviceClass
+from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_NAME,
@@ -51,7 +51,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
         vol.Optional(CONF_CALENDARIFIC_API_KEY): cv.string,
         vol.Optional(CONF_COUNTRY, default="MY"): cv.string,
-        vol.Optional(CONF_YEAR): cv.year,
+        vol.Optional(CONF_YEAR): cv.positive_int,
     }
 )
 
