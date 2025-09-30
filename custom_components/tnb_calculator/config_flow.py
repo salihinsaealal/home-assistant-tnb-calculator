@@ -11,15 +11,11 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
+    CALENDARIFIC_BASE_URL,
+    CALENDARIFIC_HOLIDAYS_ENDPOINT,
     CONF_CALENDARIFIC_API_KEY,
-    CONF_COUNTRY,
     CONF_EXPORT_ENTITY,
-    CONF_EXPORT_TOTAL_ENTITY,
     CONF_IMPORT_ENTITY,
-    CONF_IMPORT_OFFPEAK_ENTITY,
-    CONF_IMPORT_PEAK_ENTITY,
-    CONF_TOU_ENABLED,
-    CONF_YEAR,
     DEFAULT_NAME,
     DOMAIN,
 )
@@ -32,15 +28,11 @@ class TNBCalculatorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the config flow."""
-        self._import_entity = None
-        self._export_entity = None
-        self._tou_enabled = False
-        self._api_key = None
-        self._import_peak_entity = None
-        self._import_offpeak_entity = None
-        self._export_total_entity = None
+        self._import_entity: Optional[str] = None
+        self._export_entity: Optional[str] = None
+        self._api_key: Optional[str] = None
 
     async def async_step_user(
         self, user_input: Optional[Dict[str, Any]] = None
@@ -91,3 +83,113 @@ class TNBCalculatorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
             }
         )
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=data_schema,
+            errors=errors,
+        )
+
+    async def _validate_api_key(self, api_key: str) -> bool:
+        """Validate the Calendarific API key."""
+        try:
+            session = async_get_clientsession(self.hass)
+            params = {
+                "api_key": api_key,
+                "country": "MY",
+                "year": 2024,
+                "month": 1,
+                "day": 1,
+            }
+            
+            async with session.get(
+                f"{CALENDARIFIC_BASE_URL}{CALENDARIFIC_HOLIDAYS_ENDPOINT}",
+                params=params,
+                timeout=10,
+            ) as response:
+                return response.status == 200
+        except Exception:
+            return False
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        """Get the options flow for this handler."""
+        return TNBCalculatorOptionsFlow(config_entry)
+
+
+class TNBCalculatorOptionsFlow(config_entries.OptionsFlow):
+    """Handle options flow for TNB Calculator."""
+
+    def __init__(self, config_entry):
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input=None):
+        """Handle the initial step."""
+        errors = {}
+
+        if user_input is not None:
+            # Validate API key if provided
+            api_key = user_input.get(CONF_CALENDARIFIC_API_KEY)
+            if api_key and not await self._validate_api_key(api_key):
+                errors["base"] = "invalid_api_key"
+
+            if not errors:
+                return self.async_create_entry(title="", data=user_input)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_IMPORT_ENTITY,
+                        default=self.config_entry.data.get(CONF_IMPORT_ENTITY),
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(
+                            domain=["sensor", "utility_meter"],
+                            device_class=["energy"],
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_EXPORT_ENTITY,
+                        default=self.config_entry.data.get(CONF_EXPORT_ENTITY),
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(
+                            domain=["sensor", "utility_meter"],
+                            device_class=["energy"],
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_CALENDARIFIC_API_KEY,
+                        default=self.config_entry.data.get(CONF_CALENDARIFIC_API_KEY),
+                    ): selector.TextSelector(
+                        selector.TextSelectorConfig(
+                            type=selector.TextSelectorType.PASSWORD,
+                        )
+                    ),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def _validate_api_key(self, api_key: str) -> bool:
+        """Validate the Calendarific API key."""
+        try:
+            session = async_get_clientsession(self.hass)
+            params = {
+                "api_key": api_key,
+                "country": "MY",
+                "year": 2024,
+                "month": 1,
+                "day": 1,
+            }
+            
+            async with session.get(
+                f"{CALENDARIFIC_BASE_URL}{CALENDARIFIC_HOLIDAYS_ENDPOINT}",
+                params=params,
+                timeout=10,
+            ) as response:
+                return response.status == 200
+        except Exception:
+            return False

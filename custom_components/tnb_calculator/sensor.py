@@ -116,153 +116,63 @@ class TNBDataCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> Dict[str, Any]:
         """Fetch data from Home Assistant entities and calculate TNB costs."""
         try:
-            # Get current import/export energy values
-            import_energy = 0.0
-            export_energy = 0.0
-            import_peak_energy = None
-            import_offpeak_energy = None
-            export_total_energy = None
+            now = dt_util.now()
 
-            if self._import_entity:
-                import_state = self.hass.states.get(self._import_entity)
-                if import_state and import_state.state not in ["unknown", "unavailable"]:
-                    import_energy = float(import_state.state)
+            import_total = self._get_entity_state(self._import_entity)
+            export_total = self._get_entity_state(self._export_entity)
 
-            if self._export_entity:
-                export_state = self.hass.states.get(self._export_entity)
-                if export_state and export_state.state not in ["unknown", "unavailable"]:
-                    export_energy = float(export_state.state)
+            if not hasattr(self, "_monthly_data") or self._month_changed(now):
+                self._monthly_data = self._create_month_bucket(now)
 
-            if self._import_peak_entity:
-                peak_state = self.hass.states.get(self._import_peak_entity)
-                if peak_state and peak_state.state not in ["unknown", "unavailable"]:
-                    import_peak_energy = float(peak_state.state)
-                else:
-                    import_peak_energy = 0.0
+            import_delta = self._compute_delta(import_total, "import_last")
+            export_delta = self._compute_delta(export_total, "export_last")
 
-            if self._import_offpeak_entity:
-                offpeak_state = self.hass.states.get(self._import_offpeak_entity)
-                if offpeak_state and offpeak_state.state not in ["unknown", "unavailable"]:
-                    import_offpeak_energy = float(offpeak_state.state)
-                else:
-                    import_offpeak_energy = 0.0
-
-            if self._export_total_entity:
-                export_total_state = self.hass.states.get(self._export_total_entity)
-                if (
-                    export_total_state
-                    and export_total_state.state not in ["unknown", "unavailable"]
-                ):
-                    export_total_energy = float(export_total_state.state)
-                else:
-                    export_total_energy = 0.0
-
-            now = datetime.now()
-            current_month = now.month
-            current_year = now.year
-
-            # Check if today is a holiday for ToU calculations
             is_holiday = False
-            if self._tou_enabled and self._api_key:
-                is_holiday = await self._is_holiday_today()
+            if self._tou_enabled:
+                is_holiday = await self._is_holiday(now)
 
-            # Initialize or reset monthly data
-            if not hasattr(self, "_monthly_data"):
-                self._monthly_data = {
-                    "month": current_month,
-                    "year": current_year,
-                    "import_start": import_energy,
-                    "export_start": export_energy,
-                    "last_import": import_energy,
-                    "last_export": export_energy,
-                }
+            if import_delta > 0:
+                self._monthly_data["import_total"] += import_delta
+                if self._tou_enabled:
+                    if self._is_peak_period(now, is_holiday):
+                        self._monthly_data["import_peak"] += import_delta
+                    else:
+                        self._monthly_data["import_offpeak"] += import_delta
 
-                if import_peak_energy is not None:
-                    self._monthly_data["import_peak_start"] = import_peak_energy
-                    self._monthly_data["last_import_peak"] = import_peak_energy
-                if import_offpeak_energy is not None:
-                    self._monthly_data["import_offpeak_start"] = import_offpeak_energy
-                    self._monthly_data["last_import_offpeak"] = import_offpeak_energy
-                if export_total_energy is not None:
-                    self._monthly_data["export_total_start"] = export_total_energy
-                    self._monthly_data["last_export_total"] = export_total_energy
+            if export_delta > 0:
+                self._monthly_data["export_total"] += export_delta
 
-            if (
-                current_month != self._monthly_data["month"]
-                or current_year != self._monthly_data["year"]
-            ):
-                self._monthly_data = {
-                    "month": current_month,
-                    "year": current_year,
-                    "import_start": import_energy,
-                    "export_start": export_energy,
-                    "last_import": import_energy,
-                    "last_export": export_energy,
-                }
-                if import_peak_energy is not None:
-                    self._monthly_data["import_peak_start"] = import_peak_energy
-                    self._monthly_data["last_import_peak"] = import_peak_energy
-                if import_offpeak_energy is not None:
-                    self._monthly_data["import_offpeak_start"] = import_offpeak_energy
-                    self._monthly_data["last_import_offpeak"] = import_offpeak_energy
-                if export_total_energy is not None:
-                    self._monthly_data["export_total_start"] = export_total_energy
-                    self._monthly_data["last_export_total"] = export_total_energy
+            self._state["timestamp"] = now
 
-            self._monthly_data["last_import"] = import_energy
-            self._monthly_data["last_export"] = export_energy
-            if import_peak_energy is not None:
-                self._monthly_data["last_import_peak"] = import_peak_energy
-            if import_offpeak_energy is not None:
-                self._monthly_data["last_import_offpeak"] = import_offpeak_energy
-            if export_total_energy is not None:
-                self._monthly_data["last_export_total"] = export_total_energy
+            monthly_import = self._monthly_data["import_total"]
+            monthly_export = self._monthly_data["export_total"]
+            monthly_peak = self._monthly_data["import_peak"]
+            monthly_offpeak = self._monthly_data["import_offpeak"]
 
-            monthly_import = 0.0
-            monthly_export = 0.0
-            monthly_import_peak = None
-            monthly_import_offpeak = None
-            monthly_export_total = None
-
-            if export_total_energy is not None:
-                monthly_export_total = max(
-                    0.0,
-                    export_total_energy
-                    - self._monthly_data.get("export_total_start", export_total_energy),
-                )
-
-            if not self._import_entity and monthly_import_peak is not None and monthly_import_offpeak is not None:
-                monthly_import = monthly_import_peak + monthly_import_offpeak
-
-            if not self._export_entity and monthly_export_total is not None:
-                monthly_export = monthly_export_total
-
-            net_energy = monthly_import - monthly_export
-
-            total_cost, peak_cost, off_peak_cost = await self._calculate_costs(
-                monthly_import,
-                monthly_export,
-                is_holiday,
-                import_peak=monthly_import_peak,
-                import_offpeak=monthly_import_offpeak,
-                export_total=monthly_export_total,
-            )
-
-            return {
-                "import_energy": monthly_import,
-                "export_energy": monthly_export,
-                "net_energy": net_energy,
-                "total_cost": total_cost,
-                "peak_cost": peak_cost,
-                "off_peak_cost": off_peak_cost,
-                "is_holiday": is_holiday,
+            result: Dict[str, Any] = {
+                "import_energy": self._round_energy(monthly_import),
+                "export_energy": self._round_energy(monthly_export),
+                "net_energy": self._round_energy(monthly_import - monthly_export),
                 "last_update": now.isoformat(),
-                "current_month": f"{current_year}-{current_month:02d}",
+                "current_month": now.strftime("%Y-%m"),
                 "monthly_reset_day": 1,
-                "import_peak_energy": monthly_import_peak,
-                "import_offpeak_energy": monthly_import_offpeak,
-                "export_total_energy": monthly_export_total,
+                "is_holiday": is_holiday,
             }
+
+            if self._tou_enabled:
+                result["import_peak_energy"] = self._round_energy(monthly_peak)
+                result["import_offpeak_energy"] = self._round_energy(monthly_offpeak)
+                result.update(
+                    self._calculate_tou_costs(
+                        monthly_peak,
+                        monthly_offpeak,
+                        monthly_export,
+                    )
+                )
+            else:
+                result.update(self._calculate_non_tou_costs(monthly_import, monthly_export))
+
+            return result
 
         except Exception as ex:
             raise UpdateFailed(f"Error updating TNB data: {ex}") from ex
