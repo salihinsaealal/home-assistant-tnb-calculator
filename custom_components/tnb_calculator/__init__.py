@@ -30,6 +30,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "calendarific_api_key": entry.data.get("calendarific_api_key"),
             "country": entry.data.get("country", "MY"),
             "year": entry.data.get("year"),
+            "import_peak_entity": entry.data.get("import_peak_entity"),
+            "import_offpeak_entity": entry.data.get("import_offpeak_entity"),
+            "export_total_entity": entry.data.get("export_total_entity"),
         }
 
         # Set up platforms

@@ -7,17 +7,7 @@
         "data": {
           "import_entity": "Import Energy Entity",
           "export_entity": "Export Energy Entity (Optional)",
-          "tou_enabled": "Enable Time of Use (ToU) calculations",
-          "calendarific_api_key": "Calendarific API Key (for holiday detection)"
-        }
-      },
-      "tou_config": {
-        "title": "ToU Configuration",
-        "description": "Configure Time of Use settings",
-        "data": {
-          "calendarific_api_key": "Calendarific API Key",
-          "country": "Country Code (e.g., MY for Malaysia)",
-          "year": "Year for holiday data"
+          "calendarific_api_key": "Calendarific API Key (Optional - enables ToU calculations)"
         }
       }
     },
@@ -38,10 +28,7 @@
         "data": {
           "import_entity": "Import Energy Entity",
           "export_entity": "Export Energy Entity (Optional)",
-          "tou_enabled": "Enable Time of Use (ToU) calculations",
-          "calendarific_api_key": "Calendarific API Key (for holiday detection)",
-          "country": "Country Code (e.g., MY for Malaysia)",
-          "year": "Year for holiday data"
+          "calendarific_api_key": "Calendarific API Key (Optional - enables ToU calculations)"
         }
       }
     }

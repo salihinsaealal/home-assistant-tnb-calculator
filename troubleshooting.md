@@ -38,28 +38,27 @@ This guide helps you fix common problems with the TNB Calculator integration.
 - Check if your energy meter is sending data
 - Verify the sensor entity IDs in the configuration
 - Look at the sensor's last_update time
-
 ### Wrong Cost Calculations
 - Verify you selected the correct tariff type (ToU vs non-ToU)
 - Check if your energy values are in kWh
 - Make sure the billing cycle is correct
 
-## ToU Specific Issues
+### ToU Specific Issues
 
-### Holiday Detection Not Working
+#### Holiday Detection Not Working
 - Check your internet connection
 - Verify your Calendarific API key is valid
 - Make sure you have API quota remaining
 - Check the integration logs for API errors
 
-### Wrong Peak/Off-Peak Rates
-- Make sure ToU is enabled in configuration
-- Check if holiday detection is working
-- Verify your energy meter timestamps are correct
+#### Wrong Peak/Off-Peak Rates
+- Verify your Calendarific API key is working
+- Check if holiday detection is functioning (holidays should show as off-peak)
+- Ensure your import energy sensor is updating correctly
+- Verify the integration is splitting energy correctly (check peak/off-peak sensors)
+- Make sure your Home Assistant timezone matches Malaysia (for accurate peak period detection)
 
 ## API Key Problems
-
-### Invalid API Key Error
 - Get a new API key from Calendarific website
 - Make sure you copied the key correctly
 - Check for extra spaces in the key

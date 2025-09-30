@@ -2,35 +2,57 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
-## [1.0.0] - 2024-09-XX
+## [2.0.0] - 2024-09-30
+
+### Major Changes
+- **Simplified Configuration**: Now only requires import/export entities and optional Calendarific API key
+- **Automatic ToU Detection**: ToU mode is automatically enabled when API key is provided
+- **InternalPeak/Off-Peak Splitting**: Integration now handles peak/off-peak splitting internally based on TNB schedule and holidays
+- **Enhanced Sensor Coverage**: Added 20+ detailed cost breakdown sensors for ToU mode
+
+### Added
+- Automatic peak/off-peak energy splitting based on TNB ToU schedule (8AM-10PM weekdays)
+- Holiday-aware off-peak detection using Calendarific API
+- Detailed cost breakdown sensors: generation charges, AFA, capacity, network, retailing, ICT, service tax, KWTBB
+- NEM rebate sensors: peak, off-peak, capacity, network rebates
+- Rate sensors showing current tariff rates for all components
+- Insentif leveling rebate calculations
+- HACS compliance badges and improved documentation
+
+### Changed
+- **BREAKING**: Removed separate ToU entity configuration requirements
+- **BREAKING**: Removed manual ToU enable/disable option
+- Simplified setup process to just import/export + optional API key
+- Updated UI strings and configuration flow
+- Enhanced error handling and validation
+
+### Technical Improvements
+- Refactored sensor architecture to support dynamic sensor creation
+- Improved monthly reset logic with better delta calculations
+- Enhanced holiday caching for better API efficiency
+- Better handling of meter resets and edge cases
+- Comprehensive cost calculation following TNB tariff template
+
+### Migration Notes
+- Existing installations will need reconfiguration due to breaking changes
+- Remove old ToU-specific entity configurations
+- Simply provide Calendarific API key to enable ToU mode
+
+## [1.0.0] - 2024-09-25
 
 ### Added
 - Initial release of TNB Calculator integration
-- Support for non-ToU electricity tariff calculations
-- Support for ToU (Time of Use) tariff with holiday detection
+- Support for both ToU and non-ToU tariff calculations
 - Monthly billing cycle with automatic reset on 1st of each month
-- Import and export energy tracking for solar users
 - Calendarific API integration for Malaysian holiday detection
-- Multiple sensor entities for detailed cost breakdown
-- HACS integration support
-
-### Features
-- Real-time TNB cost calculation using official Malaysian rates
-- Automatic tier calculation (first 600 kWh vs excess)
-- Service tax and development charge calculations
-- Export credit calculations for net metering
-- Holiday detection for ToU off-peak rates
-
-### Configuration
-- Easy setup wizard in Home Assistant
-- Entity selection from existing sensors
-- Optional ToU configuration with API key validation
-- Automatic sensor discovery
+- Comprehensive cost breakdown with multiple sensor entities
+- Export energy credit calculations for solar users
+- Configurable through Home Assistant UI
+- HACS compatibility for easy installation
 
 ## [Unreleased]
 
 ### Planned
 - Additional tariff support
-- Historical data storage
 - Cost prediction features
 - Advanced reporting

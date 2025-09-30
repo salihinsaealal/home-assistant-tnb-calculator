@@ -1,16 +1,18 @@
 # TNB Calculator for Home Assistant
 
-This is a Home Assistant integration that calculates TNB (Tenaga Nasional Berhad) electricity costs. It works with both regular and Time of Use (ToU) electricity tariffs in Malaysia.
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![GitHub Release](https://img.shields.io/github/release/salihinsaealal/home-assistant-tnb-calculator.svg)](https://github.com/salihinsaealal/home-assistant-tnb-calculator/releases)
+[![License](https://img.shields.io/github/license/salihinsaealal/home-assistant-tnb-calculator.svg)](LICENSE)
+
+A Home Assistant integration to calculate your TNB (Tenaga Nasional Berhad) electricity costs in Malaysia. Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billing calculations.
 
 ## Features
 
-- Calculate monthly TNB electricity bills
-- Support for both non-ToU and ToU customers
-- Automatic holiday detection for ToU off-peak rates
-- Monthly billing cycle that resets on the 1st of each month
-- Support for import and export energy (solar/net metering)
-- Real-time cost updates
-
+- **Automatic ToU Detection**: Simply provide your Calendarific API key to enable Time of Use calculations
+- **Peak/Off-Peak Splitting**: Integration automatically splits your import energy into peak and off-peak based on TNB schedule and Malaysian holidays
+- **Detailed Cost Breakdown**: Get individual sensors for all charges, rebates, and rates for easy bill verification
+- **Monthly Reset**: Automatically resets on the 1st of each month to match TNB billing cycle
+- **Holiday Detection**: Uses Calendarific API to identify Malaysian public holidays for accurate off-peak rates
 ## Installation
 
 ### Method 1: HACS (Recommended)
@@ -35,28 +37,26 @@ This is a Home Assistant integration that calculates TNB (Tenaga Nasional Berhad
 3. Search for "TNB Calculator"
 4. Follow the setup steps:
 
-### For Non-ToU Users:
-- Select your import energy sensor
-- Select your export energy sensor (optional, for solar users)
-- Leave ToU disabled
-- Finish setup
-
-### For ToU Users:
-- Select your import energy sensor
-- Select your export energy sensor (optional)
-- Enable "Time of Use" option
-- Enter your Calendarific API key (get one from https://calendarific.com)
-- Finish setup
+### Setup Process:
+1. Select your **import energy sensor** (required)
+2. Select your **export energy sensor** (optional, for solar users)
+3. **Optional**: Enter your Calendarific API key to enable ToU calculations
+   - Get a free API key from [Calendarific.com](https://calendarific.com)
+   - Without API key: Uses standard non-ToU tariff
+   - With API key: Automatically enables ToU with peak/off-peak splitting
+4. Finish setup
 
 ## Requirements
 
-### For Non-ToU Users:
-- Energy sensor that tracks your electricity consumption
+### Required:
+- Import energy sensor (kWh) - tracks your total electricity consumption
+- Export energy sensor (kWh) - optional, for solar users
 
-### For ToU Users:
-- Energy sensor for consumption
-- Calendarific API key for holiday detection
-- Internet connection for API calls
+### Optional (for ToU):
+- Calendarific API key (free from calendarific.com)
+- Internet connection for holiday detection
+
+**Note**: The integration automatically handles peak/off-peak splitting internally when ToU is enabled. You don't need separate peak/off-peak sensors.
 
 ## Sensor Entities
 
@@ -66,8 +66,23 @@ After setup, these sensors will be created:
 - **Peak Cost**: Peak period charges (ToU only)
 - **Off Peak Cost**: Off-peak period charges (ToU only)
 - **Import Energy**: Monthly electricity imported in kWh
+- **Import Peak Energy**: Monthly peak-period import in kWh (ToU only)
+- **Import Off Peak Energy**: Monthly off-peak import in kWh (ToU only) 
 - **Export Energy**: Monthly electricity exported in kWh
 - **Net Energy**: Net consumption (Import - Export) in kWh
+
+### Detailed Cost Sensors (ToU only):
+- **Generation Charge Peak/Off Peak**: Energy generation costs
+- **AFA Charge**: Additional facility charge
+- **Capacity Charge**: Grid capacity costs
+- **Network Charge**: Transmission and distribution costs
+- **Retailing Charge**: Retail service charge
+- **ICT Adjustment**: Information and communication technology adjustment
+- **Service Tax**: Government service tax (8%)
+- **KWTBB Charge**: Kumpulan Wang Tenaga Boleh Baharu charge
+- **NEM Rebates**: Net energy metering rebates for solar export
+- **Insentif Rebate**: Incentive leveling rebate
+- **Rate Sensors**: Current tariff rates for all components
 
 ## How It Works
 
@@ -75,12 +90,14 @@ After setup, these sensors will be created:
 - The integration tracks your energy usage from the 1st of each month
 - Calculations reset automatically on the 1st of every month
 - This matches TNB's billing cycle
+- Peak/off-peak splitting is handled automatically by the integration based on time and holidays
 
 ### Cost Calculation
 - Uses official TNB tariff rates for Malaysia
 - Includes all charges: generation, capacity, network, service tax
 - Handles tiered pricing (first 600 kWh vs excess)
 - Calculates export credits for solar users
+- ToU mode automatically splits import energy and applies appropriate rates and NEM rebates
 
 ### Holiday Detection (ToU only)
 - Uses Calendarific API to check Malaysian holidays

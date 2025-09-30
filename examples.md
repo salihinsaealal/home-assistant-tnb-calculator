@@ -25,18 +25,20 @@ tnb_calculator:
 
 ## ToU Setup with Holiday Detection
 
-For Time of Use customers:
+For Time of Use customers, simply add your Calendarific API key:
 
 ```yaml
 # In configuration.yaml (if using YAML mode)
 tnb_calculator:
   import_entity: sensor.electricity_import_total
   export_entity: sensor.electricity_export_total
-  tou_enabled: true
   calendarific_api_key: "your_api_key_here"
-  country: "MY"
-  year: 2024
 ```
+
+**Note**: The integration automatically:
+- Splits your import energy into peak/off-peak based on time and holidays
+- Creates additional ToU sensors for detailed cost breakdown
+- Uses Malaysian holidays from Calendarific API for accurate off-peak detection
 
 ## Dashboard Card Examples
 
