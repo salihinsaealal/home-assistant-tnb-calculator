@@ -75,7 +75,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Tenaga Nasional Berhad",
         model="TNB Calculator",
-        sw_version="2.0.0",
+        sw_version="3.0.0",
     )
 
     sensors = [
@@ -159,10 +159,34 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             monthly_peak = self._monthly_data["import_peak"]
             monthly_offpeak = self._monthly_data["import_offpeak"]
 
+            # Determine day status (Weekday/Weekend/Holiday)
+            if is_holiday:
+                day_status = "Holiday"
+            elif now.weekday() >= 5:  # Saturday=5, Sunday=6
+                day_status = "Weekend"
+            else:
+                day_status = "Weekday"
+            
+            # Determine period status (Peak/Off-Peak with reason)
+            is_peak = self._is_peak_period(now, is_holiday)
+            if is_peak:
+                period_status = "Peak"
+            else:
+                # Show reason for off-peak
+                if is_holiday:
+                    period_status = "Off-Peak (Holiday)"
+                elif now.weekday() >= 5:
+                    period_status = "Off-Peak (Weekend)"
+                else:
+                    # Weekday but outside peak hours (before 2PM or after 10PM)
+                    period_status = "Off-Peak"
+
             result: Dict[str, Any] = {
                 "import_energy": self._round_energy(monthly_import),
                 "export_energy": self._round_energy(monthly_export),
                 "net_energy": self._round_energy(monthly_import - monthly_export),
+                "day_status": day_status,
+                "period_status": period_status,
                 "last_update": now.isoformat(),
                 "current_month": now.strftime("%Y-%m"),
                 "monthly_reset_day": 1,
@@ -560,7 +584,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Tenaga Nasional Berhad",
             "model": "TNB Calculator",
-            "sw_version": "2.0.0",
+            "sw_version": "3.0.0",
         }
 
     @property

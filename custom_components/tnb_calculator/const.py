@@ -50,6 +50,21 @@ BASE_SENSOR_TYPES = {
         "state_class": "total_increasing",
         "entity_category": None,  # Main entity
     },
+    # Status sensors for monitoring
+    "day_status": {
+        "name": "Day Status",
+        "unit": None,
+        "device_class": None,
+        "state_class": None,
+        "entity_category": None,  # Main entity
+    },
+    "period_status": {
+        "name": "Period Status",
+        "unit": None,
+        "device_class": None,
+        "state_class": None,
+        "entity_category": None,  # Main entity
+    },
     # Secondary cost breakdown
     "peak_cost": {
         "name": "Peak Cost",
