@@ -12,178 +12,220 @@ CONF_CALENDARIFIC_API_KEY = "calendarific_api_key"
 CONF_COUNTRY = "country"
 CONF_YEAR = "year"
 
-# Base sensor types (always exposed)
+# Base sensor types (always exposed) - ordered by priority
 BASE_SENSOR_TYPES = {
-    "total_cost": {
-        "name": "Total Cost",
+    # PRIORITY: Most important sensors at the top - Both cost types for easy comparison
+    "total_cost_tou": {
+        "name": "Total Cost (ToU)",
         "unit": "RM",
         "device_class": "monetary",
         "state_class": "measurement",
+        "entity_category": None,  # Main entity
     },
-    "peak_cost": {
-        "name": "Peak Cost",
+    "total_cost_non_tou": {
+        "name": "Total Cost (Non-ToU)",
         "unit": "RM",
         "device_class": "monetary",
         "state_class": "measurement",
-    },
-    "off_peak_cost": {
-        "name": "Off Peak Cost",
-        "unit": "RM",
-        "device_class": "monetary",
-        "state_class": "measurement",
+        "entity_category": None,  # Main entity
     },
     "import_energy": {
         "name": "Import Energy",
         "unit": "kWh",
         "device_class": "energy",
         "state_class": "total_increasing",
+        "entity_category": None,  # Main entity
     },
     "export_energy": {
         "name": "Export Energy",
         "unit": "kWh",
         "device_class": "energy",
         "state_class": "total_increasing",
+        "entity_category": None,  # Main entity
     },
     "net_energy": {
         "name": "Net Energy",
         "unit": "kWh",
         "device_class": "energy",
         "state_class": "total_increasing",
+        "entity_category": None,  # Main entity
+    },
+    # Secondary cost breakdown
+    "peak_cost": {
+        "name": "Peak Cost",
+        "unit": "RM",
+        "device_class": "monetary",
+        "state_class": "measurement",
+        "entity_category": "diagnostic",
+    },
+    "off_peak_cost": {
+        "name": "Off Peak Cost",
+        "unit": "RM",
+        "device_class": "monetary",
+        "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
 }
 
 # Additional sensors exposed when ToU processing is available
 TOU_SENSOR_TYPES = {
+    # PRIORITY: ToU energy breakdown at top
     "import_peak_energy": {
         "name": "Import Peak Energy",
         "unit": "kWh",
         "device_class": "energy",
         "state_class": "total_increasing",
+        "entity_category": None,  # Main entity
     },
     "import_offpeak_energy": {
         "name": "Import Off Peak Energy",
         "unit": "kWh",
         "device_class": "energy",
         "state_class": "total_increasing",
+        "entity_category": None,  # Main entity
     },
+    # Detailed charges (diagnostic - hidden by default)
     "charge_generation_peak": {
         "name": "Generation Charge Peak",
         "unit": "RM",
         "device_class": "monetary",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "charge_generation_offpeak": {
         "name": "Generation Charge Offpeak",
         "unit": "RM",
         "device_class": "monetary",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "charge_afa": {
         "name": "AFA Charge",
         "unit": "RM",
         "device_class": "monetary",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "charge_capacity": {
         "name": "Capacity Charge",
         "unit": "RM",
         "device_class": "monetary",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "charge_network": {
         "name": "Network Charge",
         "unit": "RM",
         "device_class": "monetary",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "charge_retailing": {
         "name": "Retailing Charge",
         "unit": "RM",
         "device_class": "monetary",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "charge_ict": {
         "name": "ICT Adjustment",
         "unit": "RM",
         "device_class": "monetary",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "charge_service_tax": {
         "name": "Service Tax",
         "unit": "RM",
         "device_class": "monetary",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "charge_kwtbb": {
         "name": "KWTBB Charge",
         "unit": "RM",
         "device_class": "monetary",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
+    # Rebates (diagnostic - hidden by default)
     "rebate_nem_peak": {
         "name": "NEM Rebate Peak",
         "unit": "RM",
         "device_class": "monetary",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "rebate_nem_offpeak": {
         "name": "NEM Rebate Offpeak",
         "unit": "RM",
         "device_class": "monetary",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "rebate_nem_capacity": {
         "name": "NEM Rebate Capacity",
         "unit": "RM",
         "device_class": "monetary",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "rebate_nem_network": {
         "name": "NEM Rebate Network",
         "unit": "RM",
         "device_class": "monetary",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "rebate_insentif": {
         "name": "Insentif Leveling Rebate",
         "unit": "RM",
         "device_class": "monetary",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
+    # Rates (diagnostic - hidden by default)
     "rate_generation_peak": {
         "name": "Generation Peak Rate",
         "unit": "RM/kWh",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "rate_generation_offpeak": {
         "name": "Generation Off Peak Rate",
         "unit": "RM/kWh",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "rate_capacity": {
         "name": "Capacity Rate",
         "unit": "RM/kWh",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "rate_network": {
         "name": "Network Rate",
         "unit": "RM/kWh",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "rate_nem_peak": {
         "name": "NEM Peak Rate",
         "unit": "RM/kWh",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "rate_nem_offpeak": {
         "name": "NEM Offpeak Rate",
         "unit": "RM/kWh",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
     "rate_ict": {
         "name": "ICT Rate",
         "unit": "RM/kWh",
         "state_class": "measurement",
+        "entity_category": "diagnostic",
     },
 }
 

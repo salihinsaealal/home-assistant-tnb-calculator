@@ -12,7 +12,7 @@ from homeassistant.const import (
     UnitOfEnergy,
 )
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -67,6 +67,17 @@ async def async_setup_entry(
     coordinator = TNBDataCoordinator(hass, config)
     await coordinator.async_config_entry_first_refresh()
 
+    # Create device registry entry
+    device_registry = dr.async_get(hass)
+    device = device_registry.async_get_or_create(
+        config_entry_id=config_entry.entry_id,
+        identifiers={(DOMAIN, config_entry.entry_id)},
+        name=DEFAULT_NAME,
+        manufacturer="Tenaga Nasional Berhad",
+        model="TNB Calculator",
+        sw_version="2.0.0",
+    )
+
     sensors = [
         TNBSensor(
             coordinator,
@@ -75,7 +86,9 @@ async def async_setup_entry(
             sensor_config.get("unit"),
             sensor_config.get("device_class"),
             sensor_config.get("state_class"),
+            sensor_config.get("entity_category"),
             config_entry.entry_id,
+            device.id,
         )
         for sensor_type, sensor_config in coordinator.sensor_definitions.items()
     ]
@@ -156,18 +169,36 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 "is_holiday": is_holiday,
             }
 
+            # Always calculate non-ToU costs
+            non_tou_costs = self._calculate_non_tou_costs(monthly_import, monthly_export)
+            result["total_cost_non_tou"] = non_tou_costs["total_cost"]
+            
+            # Calculate ToU costs if enabled
             if self._tou_enabled:
                 result["import_peak_energy"] = self._round_energy(monthly_peak)
                 result["import_offpeak_energy"] = self._round_energy(monthly_offpeak)
-                result.update(
-                    self._calculate_tou_costs(
-                        monthly_peak,
-                        monthly_offpeak,
-                        monthly_export,
-                    )
+                tou_costs = self._calculate_tou_costs(
+                    monthly_peak,
+                    monthly_offpeak,
+                    monthly_export,
                 )
+                result["total_cost_tou"] = tou_costs["total_cost"]
+                # Add detailed ToU breakdown
+                result.update(tou_costs)
             else:
-                result.update(self._calculate_non_tou_costs(monthly_import, monthly_export))
+                # If ToU not enabled, estimate ToU cost using import_total split
+                # Assume 40% peak, 60% off-peak as rough estimate
+                estimated_peak = monthly_import * 0.4
+                estimated_offpeak = monthly_import * 0.6
+                tou_costs_estimate = self._calculate_tou_costs(
+                    estimated_peak,
+                    estimated_offpeak,
+                    monthly_export,
+                )
+                result["total_cost_tou"] = tou_costs_estimate["total_cost"]
+                # Add non-ToU breakdown
+                result["peak_cost"] = non_tou_costs.get("peak_cost", 0.0)
+                result["off_peak_cost"] = non_tou_costs.get("off_peak_cost", 0.0)
 
             return result
 
@@ -511,7 +542,9 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
         unit: Optional[str],
         device_class: Optional[str],
         state_class: Optional[str],
+        entity_category: Optional[str],
         entry_id: str,
+        device_id: str,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
@@ -521,6 +554,14 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
         self._attr_unit_of_measurement = unit
         self._attr_device_class = device_class
         self._attr_state_class = state_class
+        self._attr_entity_category = entity_category
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+            "manufacturer": "Tenaga Nasional Berhad",
+            "model": "TNB Calculator",
+            "sw_version": "2.0.0",
+        }
 
     @property
     def state(self) -> Any:
