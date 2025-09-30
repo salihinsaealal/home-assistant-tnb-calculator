@@ -238,31 +238,69 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         current_time = timestamp.time()
         return PEAK_START <= current_time < PEAK_END
 
-    def _lookup_ict_rate(self, import_kwh: float) -> float:
-        """Lookup ICT rate based on consumption tier."""
+    def _lookup_ict_rate_tou(self, import_kwh: float) -> float:
+        """Lookup ICT rate for ToU calculation - uses >= logic."""
         tiers = [
-            (200, -0.25),
-            (250, -0.245),
-            (300, -0.225),
-            (350, -0.21),
-            (400, -0.17),
-            (450, -0.145),
-            (500, -0.12),
-            (550, -0.105),
-            (600, -0.09),
-            (650, -0.075),
-            (700, -0.055),
-            (750, -0.045),
-            (800, -0.04),
-            (850, -0.025),
-            (900, -0.01),
-            (1000, -0.005),
+            (1, -0.25),
+            (201, -0.245),
+            (251, -0.225),
+            (301, -0.21),
+            (351, -0.17),
+            (401, -0.145),
+            (451, -0.12),
+            (501, -0.105),
+            (551, -0.09),
+            (601, -0.075),
+            (651, -0.055),
+            (701, -0.045),
+            (751, -0.04),
+            (801, -0.025),
+            (851, -0.01),
+            (901, -0.005),
         ]
         
+        ict_rate = tiers[0][1]
         for limit, rate in tiers:
-            if import_kwh <= limit:
-                return rate
-        return 0.0
+            if import_kwh >= limit:
+                ict_rate = rate
+        return ict_rate
+
+    def _lookup_ict_rate_non_tou(self, import_kwh: float) -> float:
+        """Lookup ICT rate for non-ToU calculation - uses <= logic."""
+        if import_kwh <= 200:
+            return -0.25
+        elif import_kwh <= 250:
+            return -0.245
+        elif import_kwh <= 300:
+            return -0.225
+        elif import_kwh <= 350:
+            return -0.21
+        elif import_kwh <= 400:
+            return -0.17
+        elif import_kwh <= 450:
+            return -0.145
+        elif import_kwh <= 500:
+            return -0.12
+        elif import_kwh <= 550:
+            return -0.105
+        elif import_kwh <= 600:
+            return -0.09
+        elif import_kwh <= 650:
+            return -0.075
+        elif import_kwh <= 700:
+            return -0.055
+        elif import_kwh <= 750:
+            return -0.045
+        elif import_kwh <= 800:
+            return -0.04
+        elif import_kwh <= 850:
+            return -0.025
+        elif import_kwh <= 900:
+            return -0.01
+        elif import_kwh <= 1000:
+            return -0.005
+        else:
+            return 0
 
     def _round_currency(self, value: float) -> float:
         """Round currency to 2 decimal places."""
@@ -271,6 +309,195 @@ class TNBDataCoordinator(DataUpdateCoordinator):
     def _round_energy(self, value: float) -> float:
         """Round energy to 3 decimal places."""
         return round(value, 3)
+
+    async def _is_holiday(self, timestamp: datetime) -> bool:
+        """Check if the date is a holiday using Calendarific API."""
+        if not self._api_key:
+            return False
+        
+        date_str = timestamp.strftime("%Y-%m-%d")
+        
+        # Check cache first
+        if date_str in self._holiday_cache:
+            return self._holiday_cache[date_str]
+        
+        try:
+            session = async_get_clientsession(self.hass)
+            url = f"{CALENDARIFIC_BASE_URL}{CALENDARIFIC_HOLIDAYS_ENDPOINT}"
+            params = {
+                "api_key": self._api_key,
+                "country": self._country,
+                "year": timestamp.year,
+                "type": "national",
+            }
+            
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    holidays = data.get("response", {}).get("holidays", [])
+                    
+                    # Cache all holidays for the year
+                    for holiday in holidays:
+                        holiday_date = holiday.get("date", {}).get("iso")
+                        if holiday_date:
+                            self._holiday_cache[holiday_date] = True
+                    
+                    # Check if current date is in holidays
+                    is_holiday = date_str in self._holiday_cache
+                    if not is_holiday:
+                        self._holiday_cache[date_str] = False
+                    
+                    return is_holiday
+                else:
+                    _LOGGER.warning(
+                        "Failed to fetch holidays: HTTP %s", response.status
+                    )
+                    return False
+        except Exception as ex:
+            _LOGGER.error("Error checking holiday status: %s", ex)
+            return False
+
+    def _calculate_tou_costs(
+        self,
+        import_peak: float,
+        import_offpeak: float,
+        export_total: float,
+    ) -> Dict[str, Any]:
+        """Calculate ToU-based costs following the template exactly."""
+        # Derived quantities
+        import_total = import_peak + import_offpeak
+        export_peak = import_peak
+        export_offpeak = export_total - export_peak
+        
+        # Effective import energy rates (based on import_total threshold)
+        if import_total < 1500:
+            gen_peak_eff = 0.2852
+            gen_off_eff = 0.2443
+        else:
+            gen_peak_eff = 0.3852
+            gen_off_eff = 0.3443
+        
+        # Fixed rates
+        cap_rate = 0.0455
+        netw_rate = 0.1285
+        
+        # AFA & Retailing
+        afa = 0.0 if import_total < 600 else import_total * 0.0145
+        retailing = 10.0 if import_total > 600 else 0.0
+        
+        # ICT lookup
+        ict_rate = self._lookup_ict_rate_tou(import_total)
+        ict_adj = import_total * ict_rate
+        
+        # Import-side charges
+        e10_peak = import_peak * gen_peak_eff
+        e11_off = import_offpeak * gen_off_eff
+        e13_cap = import_total * cap_rate
+        e14_netw = import_total * netw_rate
+        e12_afa = afa
+        e15_retail = retailing
+        e17_ict = ict_adj
+        e18_import_charge = e10_peak + e11_off + e12_afa + e13_cap + e14_netw + e15_retail + e17_ict
+        
+        # Service Tax & KWTBB (both based on E18)
+        e19_st = (e18_import_charge * 0.08) if import_total > 600 else 0.0
+        e20_kw = (e18_import_charge * 0.016) if import_total > 300 else 0.0
+        
+        # NEM rebate lines use base energy rates
+        nem_peak_rate = 0.2852
+        nem_off_rate = 0.2443
+        e23_nem_peak = -export_peak * nem_peak_rate
+        e24_nem_off = -export_offpeak * nem_off_rate
+        e25_nem_cap = -export_total * cap_rate
+        e26_nem_netw = -export_total * netw_rate
+        nem_rebate_sum = e23_nem_peak + e24_nem_off + e25_nem_cap + e26_nem_netw
+        
+        # Insentif Leveling
+        e28_insentif = -export_total * ict_rate
+        
+        # Final total
+        e30_final = e18_import_charge + e19_st + e20_kw + nem_rebate_sum + e28_insentif
+        
+        return {
+            "total_cost": self._round_currency(e30_final),
+            "peak_cost": self._round_currency(e10_peak),
+            "off_peak_cost": self._round_currency(e11_off),
+            "charge_generation_peak": self._round_currency(e10_peak),
+            "charge_generation_offpeak": self._round_currency(e11_off),
+            "charge_afa": self._round_currency(e12_afa),
+            "charge_capacity": self._round_currency(e13_cap),
+            "charge_network": self._round_currency(e14_netw),
+            "charge_retailing": self._round_currency(e15_retail),
+            "charge_ict": self._round_currency(e17_ict),
+            "charge_service_tax": self._round_currency(e19_st),
+            "charge_kwtbb": self._round_currency(e20_kw),
+            "rebate_nem_peak": self._round_currency(e23_nem_peak),
+            "rebate_nem_offpeak": self._round_currency(e24_nem_off),
+            "rebate_nem_capacity": self._round_currency(e25_nem_cap),
+            "rebate_nem_network": self._round_currency(e26_nem_netw),
+            "rebate_insentif": self._round_currency(e28_insentif),
+            "rate_generation_peak": gen_peak_eff,
+            "rate_generation_offpeak": gen_off_eff,
+            "rate_capacity": cap_rate,
+            "rate_network": netw_rate,
+            "rate_nem_peak": nem_peak_rate,
+            "rate_nem_offpeak": nem_off_rate,
+            "rate_ict": ict_rate,
+        }
+
+    def _calculate_non_tou_costs(
+        self, import_kwh: float, export_kwh: float
+    ) -> Dict[str, Any]:
+        """Calculate non-ToU-based costs following the template exactly."""
+        # ICT Rate calculation
+        ict_rate = self._lookup_ict_rate_non_tou(import_kwh)
+        
+        # Import calculation - First tier (up to 600 kWh)
+        import_tier1 = min(import_kwh, 600)
+        import_caj_tier1 = import_tier1 * 0.2703
+        import_capacity_tier1 = import_tier1 * 0.0455
+        import_network_tier1 = import_tier1 * 0.1285
+        import_runcit_tier1 = 0
+        import_ict_tier1 = import_tier1 * ict_rate
+        import_kwtbb_tier1 = (import_caj_tier1 + import_capacity_tier1 + import_network_tier1 + import_ict_tier1) * 0.016
+        
+        # Import calculation - Second tier (excess over 600 kWh)
+        import_tier2 = max(import_kwh - 600, 0)
+        import_caj_tier2 = import_tier2 * 0.2703
+        import_capacity_tier2 = import_tier2 * 0.0455
+        import_network_tier2 = import_tier2 * 0.1285
+        import_runcit_tier2 = 10 if import_tier2 > 0 else 0
+        import_ict_tier2 = import_tier2 * ict_rate
+        import_kwtbb_tier2 = (import_caj_tier2 + import_capacity_tier2 + import_network_tier2 + import_ict_tier2) * 0.016
+        import_service_tax = (import_caj_tier2 + import_capacity_tier2 + import_network_tier2 + import_runcit_tier2 + import_ict_tier2) * 0.08
+        
+        # Import totals
+        total_import_caj = import_caj_tier1 + import_caj_tier2
+        total_import_capacity = import_capacity_tier1 + import_capacity_tier2
+        total_import_network = import_network_tier1 + import_network_tier2
+        total_import_runcit = import_runcit_tier1 + import_runcit_tier2
+        total_import_ict = import_kwh * ict_rate
+        total_import_kwtbb = (import_kwtbb_tier1 + import_kwtbb_tier2) if import_kwh > 300 else 0
+        total_import_service_tax = import_service_tax
+        
+        total_import = total_import_caj + total_import_capacity + total_import_network + total_import_runcit + total_import_ict + total_import_kwtbb + total_import_service_tax
+        
+        # Export calculation (credits)
+        export_caj = export_kwh * -0.2703
+        export_capacity = export_kwh * -0.0455
+        export_network = export_kwh * -0.1285
+        export_ict = export_kwh * -ict_rate
+        
+        total_export = export_caj + export_capacity + export_network + export_ict
+        
+        # Final subtotal
+        subtotal = total_import + total_export
+        
+        return {
+            "total_cost": self._round_currency(subtotal),
+            "peak_cost": self._round_currency(0.0),
+            "off_peak_cost": self._round_currency(total_import_caj),
+        }
 
 
 class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
