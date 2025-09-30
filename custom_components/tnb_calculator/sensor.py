@@ -80,9 +80,9 @@ async def async_setup_entry(
         config_entry_id=config_entry.entry_id,
         identifiers={(DOMAIN, config_entry.entry_id)},
         name=DEFAULT_NAME,
-        manufacturer="Tenaga Nasional Berhad",
+        manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.0.2",
+        sw_version="3.0.3",
     )
 
     sensors = [
@@ -479,9 +479,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         export_total: float,
     ) -> Dict[str, Any]:
         """Calculate ToU-based costs following the template exactly."""
-        # Derived quantities
+        # Derived quantities (Excel: E2,E6,E7)
         import_total = import_peak + import_offpeak
-        export_peak = import_peak
+        export_peak = min(import_peak, export_total)
         export_offpeak = export_total - export_peak
         
         # Effective import energy rates (based on import_total threshold)
