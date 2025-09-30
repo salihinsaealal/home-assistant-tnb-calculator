@@ -37,6 +37,7 @@ from .const import (
     DOMAIN,
     BASE_SENSOR_TYPES,
     TOU_SENSOR_TYPES,
+    MAX_DELTA_PER_INTERVAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -81,7 +82,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Tenaga Nasional Berhad",
         model="TNB Calculator",
-        sw_version="3.0.1",
+        sw_version="3.0.2",
     )
 
     sensors = [
@@ -304,7 +305,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         }
 
     def _compute_delta(self, current_value: float, last_key: str) -> float:
-        """Compute delta from last reading, handling meter resets."""
+        """Compute delta from last reading, handling meter resets and spikes."""
         if not hasattr(self, "_monthly_data"):
             return 0.0
         
@@ -313,7 +314,28 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         
         # Handle meter reset (negative delta)
         if delta < 0:
+            _LOGGER.warning(
+                "Meter reset detected for %s: previous=%.3f, current=%.3f. "
+                "Treating current value as delta.",
+                last_key,
+                last_value,
+                current_value,
+            )
             delta = current_value
+        
+        # Handle unrealistic spikes (likely sensor glitches)
+        if delta > MAX_DELTA_PER_INTERVAL:
+            _LOGGER.warning(
+                "Spike detected for %s: delta=%.3f kWh exceeds threshold of %.1f kWh. "
+                "Previous=%.3f, Current=%.3f. Ignoring this reading to prevent data corruption.",
+                last_key,
+                delta,
+                MAX_DELTA_PER_INTERVAL,
+                last_value,
+                current_value,
+            )
+            # Don't update last_value, so next reading will compare against valid baseline
+            return 0.0
         
         self._monthly_data[last_key] = current_value
         return delta

@@ -38,6 +38,27 @@ This guide helps you fix common problems with the TNB Calculator integration.
 - Check if your energy meter is sending data
 - Verify the sensor entity IDs in the configuration
 - Look at the sensor's last_update time
+
+### Sudden Spikes or Energy Meter Resets
+The integration automatically protects against data corruption from sensor anomalies:
+
+**Spike Detection**
+- Filters out unrealistic sudden increases (> 10 kWh per 5 minutes)
+- Prevents data corruption from sensor glitches
+- Readings exceeding the threshold are ignored
+- Check logs for warnings: "Spike detected for..."
+
+**Meter Resets**
+- Automatically detected when current value < previous value
+- Integration treats the new reading as the delta
+- Check logs for warnings: "Meter reset detected for..."
+
+**What to do**
+- Warnings in logs mean your data is protected
+- The integration will resume normal tracking when sensor stabilizes
+- No action needed - protection is automatic
+- If you consistently see spike warnings, check your energy sensor hardware
+
 ### Wrong Cost Calculations
 - Verify you selected the correct tariff type (ToU vs non-ToU)
 - Check if your energy values are in kWh
@@ -101,6 +122,8 @@ logger:
 - "Error updating TNB data" - Check your energy sensors
 - "Failed to fetch holiday data" - Check API key and internet
 - "Invalid API key" - Get a new key from Calendarific
+- "Spike detected" - Unrealistic reading filtered (data protected)
+- "Meter reset detected" - Negative delta handled automatically
 
 ## Getting Help
 

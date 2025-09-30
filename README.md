@@ -149,6 +149,15 @@ action:
 - For ToU users, verify your Calendarific API key is working
 - Check if your energy sensors report in kWh
 
+### Sudden Spikes or Meter Resets
+The integration includes automatic spike detection to prevent data corruption from:
+- **Sensor glitches**: Unrealistic sudden increases are filtered out
+- **Meter resets**: Automatically detected and handled
+- **Threshold**: Changes exceeding 10 kWh per 5-minute interval are ignored
+- **Logging**: Check Home Assistant logs for warnings about detected spikes
+
+If you see warnings in the logs about spike detection, it means the integration protected your data from corruption. The baseline will be restored when your sensor returns to normal values.
+
 ### Holiday Detection Not Working
 - Check your internet connection
 - Verify your Calendarific API key is valid

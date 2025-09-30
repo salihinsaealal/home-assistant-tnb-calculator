@@ -5,6 +5,13 @@ DOMAIN = "tnb_calculator"
 DEFAULT_NAME = "TNB Calculator"
 DEFAULT_UPDATE_INTERVAL = 300  # 5 minutes
 
+# Spike detection threshold - maximum reasonable kWh change per update interval
+# At 300s (5 min) interval, 50 kWh would mean 600 kW power which is unrealistic for residential
+# Typical home: 10 kW max = 0.83 kWh per 5 min
+# With solar: 20 kW max = 1.67 kWh per 5 min
+# Set threshold at 10 kWh per interval to catch anomalies while allowing burst usage
+MAX_DELTA_PER_INTERVAL = 10.0  # kWh
+
 # Configuration keys
 CONF_IMPORT_ENTITY = "import_entity"
 CONF_EXPORT_ENTITY = "export_entity"
