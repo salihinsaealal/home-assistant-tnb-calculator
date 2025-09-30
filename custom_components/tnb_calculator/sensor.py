@@ -16,6 +16,7 @@ from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
@@ -44,6 +45,10 @@ PEAK_DAYS = {0, 1, 2, 3, 4}  # Monday to Friday
 PEAK_START = time(14, 0)  # 2PM
 PEAK_END = time(22, 0)    # 10PM
 
+# Storage constants
+STORAGE_VERSION = 1
+STORAGE_KEY = "tnb_calculator_monthly_data"
+
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     {
         vol.Required(CONF_IMPORT_ENTITY): cv.entity_id,
@@ -62,7 +67,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the TNB Calculator sensors."""
-    config = config_entry.data
+    config = dict(config_entry.data)
+    config["entry_id"] = config_entry.entry_id
 
     coordinator = TNBDataCoordinator(hass, config)
     await coordinator.async_config_entry_first_refresh()
@@ -75,7 +81,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Tenaga Nasional Berhad",
         model="TNB Calculator",
-        sw_version="3.0.0",
+        sw_version="3.0.1",
     )
 
     sensors = [
@@ -122,17 +128,42 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         self._state: Dict[str, Any] = {}
         self._last_update: Optional[datetime] = None
         self._holiday_cache: Dict[str, bool] = {}
+        
+        # Setup persistent storage
+        self._store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}_{config.get('entry_id', 'default')}")
+        self._monthly_data_loaded = False
+
+    async def _load_monthly_data(self) -> None:
+        """Load monthly data from storage."""
+        if self._monthly_data_loaded:
+            return
+            
+        stored_data = await self._store.async_load()
+        if stored_data:
+            _LOGGER.debug("Loaded monthly data from storage: %s", stored_data)
+            self._monthly_data = stored_data
+        self._monthly_data_loaded = True
+
+    async def _save_monthly_data(self) -> None:
+        """Save monthly data to storage."""
+        if hasattr(self, "_monthly_data"):
+            await self._store.async_save(self._monthly_data)
+            _LOGGER.debug("Saved monthly data to storage: %s", self._monthly_data)
 
     async def _async_update_data(self) -> Dict[str, Any]:
         """Fetch data from Home Assistant entities and calculate TNB costs."""
         try:
             now = dt_util.now()
 
+            # Load stored data on first run
+            await self._load_monthly_data()
+
             import_total = self._get_entity_state(self._import_entity)
             export_total = self._get_entity_state(self._export_entity)
 
             if not hasattr(self, "_monthly_data") or self._month_changed(now):
                 self._monthly_data = self._create_month_bucket(now)
+                await self._save_monthly_data()
 
             import_delta = self._compute_delta(import_total, "import_last")
             export_delta = self._compute_delta(export_total, "export_last")
@@ -141,6 +172,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             if self._tou_enabled:
                 is_holiday = await self._is_holiday(now)
 
+            data_changed = False
             if import_delta > 0:
                 self._monthly_data["import_total"] += import_delta
                 if self._tou_enabled:
@@ -148,9 +180,15 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                         self._monthly_data["import_peak"] += import_delta
                     else:
                         self._monthly_data["import_offpeak"] += import_delta
+                data_changed = True
 
             if export_delta > 0:
                 self._monthly_data["export_total"] += export_delta
+                data_changed = True
+
+            # Save data after changes
+            if data_changed:
+                await self._save_monthly_data()
 
             self._state["timestamp"] = now
 
