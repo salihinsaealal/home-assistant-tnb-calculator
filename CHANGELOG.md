@@ -11,7 +11,7 @@ All notable changes to TNB Calculator will be documented in this file.
 - **Enhanced Sensor Coverage**: Added 20+ detailed cost breakdown sensors for ToU mode
 
 ### Added
-- Automatic peak/off-peak energy splitting based on TNB ToU schedule (8AM-10PM weekdays)
+- Automatic peak/off-peak energy splitting based on TNB ToU schedule (2PM-10PM weekdays)
 - Holiday-aware off-peak detection using Calendarific API
 - Detailed cost breakdown sensors: generation charges, AFA, capacity, network, retailing, ICT, service tax, KWTBB
 - NEM rebate sensors: peak, off-peak, capacity, network rebates

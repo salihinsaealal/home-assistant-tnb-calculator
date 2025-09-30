@@ -43,8 +43,8 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 PEAK_DAYS = {0, 1, 2, 3, 4}  # Monday to Friday
-PEAK_START = time(8, 0)
-PEAK_END = time(22, 0)
+PEAK_START = time(14, 0)  # 2PM
+PEAK_END = time(22, 0)    # 10PM
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     {
@@ -237,7 +237,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         if timestamp.weekday() >= 5:
             return False
         
-        # Weekday 8AM-10PM is peak
+        # Weekday 2PM-10PM is peak
         current_time = timestamp.time()
         return PEAK_START <= current_time < PEAK_END
 

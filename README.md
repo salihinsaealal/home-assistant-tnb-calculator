@@ -9,7 +9,7 @@ A Home Assistant integration to calculate your TNB (Tenaga Nasional Berhad) elec
 ## Features
 
 - **Automatic ToU Detection**: Simply provide your Calendarific API key to enable Time of Use calculations
-- **Peak/Off-Peak Splitting**: Integration automatically splits your import energy into peak and off-peak based on TNB schedule and Malaysian holidays
+- **Peak/Off-Peak Splitting**: Integration automatically splits your import energy into peak (2PM-10PM weekdays) and off-peak (10PM-2PM + weekends + holidays) based on TNB schedule
 - **Detailed Cost Breakdown**: Get individual sensors for all charges, rebates, and rates for easy bill verification
 - **Monthly Reset**: Automatically resets on the 1st of each month to match TNB billing cycle
 - **Holiday Detection**: Uses Calendarific API to identify Malaysian public holidays for accurate off-peak rates
