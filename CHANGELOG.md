@@ -2,6 +2,21 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [3.1.3] - 2025-10-01
+
+### Fixed
+- **Storage Migration**: Fixed migration from v3.0.x to v3.1.x storage format
+  - Old format stored monthly data directly, new format wraps it with holiday cache
+  - Migration now detects and converts old format automatically
+  - Preserves all existing monthly data during upgrade
+- **KeyError on 'month'**: Fixed crash when loading invalid or empty storage data
+  - Validates monthly_data has required 'month' and 'year' keys before loading
+  - Creates new bucket if storage data is invalid
+
+### Technical
+- Enhanced `_load_monthly_data()` to handle both old and new storage formats
+- Added validation checks before setting `_monthly_data`
+
 ## [3.1.2] - 2025-10-01
 
 ### Fixed

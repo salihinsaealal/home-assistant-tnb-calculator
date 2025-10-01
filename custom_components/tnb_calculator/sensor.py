@@ -82,7 +82,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.1.2",
+        sw_version="3.1.3",
     )
 
     sensors = [
@@ -154,10 +154,26 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         if not stored_data and self._entry_id:
             _LOGGER.info("Attempting to migrate data from old storage format")
             old_store = Store(self.hass, STORAGE_VERSION, f"{STORAGE_KEY}_{self._entry_id}")
-            stored_data = await old_store.async_load()
-            if stored_data:
-                _LOGGER.info("Successfully migrated data from old storage. Saving to new location.")
-                await self._store.async_save(stored_data)
+            old_data = await old_store.async_load()
+            if old_data:
+                # Check if old data is in old format (monthly_data directly) or new format (wrapped)
+                if "monthly_data" in old_data:
+                    # Already in new format
+                    stored_data = old_data
+                elif "month" in old_data and "year" in old_data:
+                    # Old format - monthly data was stored directly
+                    _LOGGER.info("Converting old storage format to new format")
+                    stored_data = {
+                        "monthly_data": old_data,
+                        "holiday_cache": {},
+                        "last_holiday_fetch": None,
+                    }
+                else:
+                    stored_data = old_data
+                
+                if stored_data:
+                    _LOGGER.info("Successfully migrated data from old storage. Saving to new location.")
+                    await self._store.async_save(stored_data)
         
         if stored_data:
             _LOGGER.debug("Loaded monthly data from storage: %s", stored_data)
