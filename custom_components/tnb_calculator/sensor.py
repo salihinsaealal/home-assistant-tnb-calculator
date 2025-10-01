@@ -11,7 +11,6 @@ from homeassistant.const import (
     CONF_NAME,
     UnitOfEnergy,
 )
-from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -73,11 +72,7 @@ async def async_setup_entry(
     config["entry_id"] = config_entry.entry_id
 
     coordinator = TNBDataCoordinator(hass, config)
-    
-    try:
-        await coordinator.async_config_entry_first_refresh()
-    except Exception as err:
-        raise ConfigEntryNotReady(f"Failed to initialize TNB Calculator: {err}") from err
+    await coordinator.async_config_entry_first_refresh()
 
     # Create device registry entry
     device_registry = dr.async_get(hass)
@@ -87,7 +82,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.1.1",
+        sw_version="3.1.2",
     )
 
     sensors = [

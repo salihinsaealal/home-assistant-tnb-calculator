@@ -2,6 +2,18 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [3.1.2] - 2025-10-01
+
+### Fixed
+- **ConfigEntryNotReady Exception**: Moved entity validation to `__init__.py` before platform forwarding
+  - Prevents warning: "raises exception ConfigEntryNotReady in forwarded platform sensor"
+  - Proper retry mechanism when entities are not yet available
+  - Cleaner error handling and logging
+
+### Technical
+- Entity validation now happens in `async_setup_entry` in `__init__.py`
+- Removed redundant exception handling from `sensor.py`
+
 ## [3.1.0] - 2025-10-01
 
 ### Fixed
