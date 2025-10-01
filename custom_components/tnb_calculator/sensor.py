@@ -82,7 +82,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.0.4",
+        sw_version="3.1.0",
     )
 
     sensors = [
@@ -128,11 +128,14 @@ class TNBDataCoordinator(DataUpdateCoordinator):
 
         self._state: Dict[str, Any] = {}
         self._last_update: Optional[datetime] = None
-        self._holiday_cache: Dict[str, bool] = {}
         
-        # Setup persistent storage
-        self._store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}_{config.get('entry_id', 'default')}")
+        # Setup persistent storage with stable identifier
+        # Use import entity as stable key so data survives delete/re-add
+        storage_id = self._import_entity.replace(".", "_").replace("sensor_", "") if self._import_entity else "default"
+        self._store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}_{storage_id}")
+        self._entry_id = config.get('entry_id')
         self._monthly_data_loaded = False
+        self._holiday_data_loaded = False
 
     async def _load_monthly_data(self) -> None:
         """Load monthly data from storage."""
@@ -140,16 +143,43 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             return
             
         stored_data = await self._store.async_load()
+        
+        # Try migration from old entry_id-based storage if new storage is empty
+        if not stored_data and self._entry_id:
+            _LOGGER.info("Attempting to migrate data from old storage format")
+            old_store = Store(self.hass, STORAGE_VERSION, f"{STORAGE_KEY}_{self._entry_id}")
+            stored_data = await old_store.async_load()
+            if stored_data:
+                _LOGGER.info("Successfully migrated data from old storage. Saving to new location.")
+                await self._store.async_save(stored_data)
+        
         if stored_data:
             _LOGGER.debug("Loaded monthly data from storage: %s", stored_data)
-            self._monthly_data = stored_data
+            self._monthly_data = stored_data.get("monthly_data", {})
+            
+            # Load holiday cache from storage
+            if not self._holiday_data_loaded:
+                self._holiday_cache = stored_data.get("holiday_cache", {})
+                self._last_holiday_fetch = stored_data.get("last_holiday_fetch")
+                self._holiday_data_loaded = True
+                _LOGGER.debug("Loaded %d holidays from storage, last fetch: %s", 
+                             len(self._holiday_cache), self._last_holiday_fetch)
+        else:
+            self._holiday_cache = {}
+            self._last_holiday_fetch = None
+            
         self._monthly_data_loaded = True
 
     async def _save_monthly_data(self) -> None:
         """Save monthly data to storage."""
         if hasattr(self, "_monthly_data"):
-            await self._store.async_save(self._monthly_data)
-            _LOGGER.debug("Saved monthly data to storage: %s", self._monthly_data)
+            storage_data = {
+                "monthly_data": self._monthly_data,
+                "holiday_cache": getattr(self, "_holiday_cache", {}),
+                "last_holiday_fetch": getattr(self, "_last_holiday_fetch", None),
+            }
+            await self._store.async_save(storage_data)
+            _LOGGER.debug("Saved data to storage: monthly + %d holidays", len(getattr(self, "_holiday_cache", {})))
 
     async def _async_update_data(self) -> Dict[str, Any]:
         """Fetch data from Home Assistant entities and calculate TNB costs."""
@@ -171,6 +201,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
 
             is_holiday = False
             if self._tou_enabled:
+                # Fetch holidays daily
+                await self._fetch_holidays_if_needed(now)
                 is_holiday = await self._is_holiday(now)
 
             data_changed = False
@@ -425,17 +457,20 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         """Round energy to 3 decimal places."""
         return round(value, 3)
 
-    async def _is_holiday(self, timestamp: datetime) -> bool:
-        """Check if the date is a holiday using Calendarific API."""
+    async def _fetch_holidays_if_needed(self, timestamp: datetime) -> None:
+        """Fetch holidays from API daily and cache them."""
         if not self._api_key:
-            return False
+            return
         
-        date_str = timestamp.strftime("%Y-%m-%d")
+        now = dt_util.now()
         
-        # Check cache first
-        if date_str in self._holiday_cache:
-            return self._holiday_cache[date_str]
+        # Check if we need to fetch (once per day)
+        if self._last_holiday_fetch:
+            last_fetch = dt_util.parse_datetime(self._last_holiday_fetch)
+            if last_fetch and (now - last_fetch).total_seconds() < 86400:  # 24 hours
+                return
         
+        # Fetch holidays for current year
         try:
             session = async_get_clientsession(self.hass)
             url = f"{CALENDARIFIC_BASE_URL}{CALENDARIFIC_HOLIDAYS_ENDPOINT}"
@@ -446,10 +481,18 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 "type": "national",
             }
             
+            _LOGGER.info("Fetching holidays for year %s from Calendarific API", timestamp.year)
             async with session.get(url, params=params) as response:
                 if response.status == 200:
                     data = await response.json()
                     holidays = data.get("response", {}).get("holidays", [])
+                    
+                    # Clear old cache for this year and rebuild
+                    year_prefix = f"{timestamp.year}-"
+                    self._holiday_cache = {
+                        k: v for k, v in self._holiday_cache.items() 
+                        if not k.startswith(year_prefix)
+                    }
                     
                     # Cache all holidays for the year
                     for holiday in holidays:
@@ -457,20 +500,32 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                         if holiday_date:
                             self._holiday_cache[holiday_date] = True
                     
-                    # Check if current date is in holidays
-                    is_holiday = date_str in self._holiday_cache
-                    if not is_holiday:
-                        self._holiday_cache[date_str] = False
-                    
-                    return is_holiday
+                    self._last_holiday_fetch = now.isoformat()
+                    await self._save_monthly_data()
+                    _LOGGER.info("Successfully cached %d holidays for %s", 
+                               len([k for k in self._holiday_cache.keys() if k.startswith(year_prefix)]),
+                               timestamp.year)
                 else:
                     _LOGGER.warning(
-                        "Failed to fetch holidays: HTTP %s", response.status
+                        "Failed to fetch holidays: HTTP %s. Using cached data if available.",
+                        response.status
                     )
-                    return False
         except Exception as ex:
-            _LOGGER.error("Error checking holiday status: %s", ex)
+            _LOGGER.error("Error fetching holidays: %s. Using cached data if available.", ex)
+    
+    async def _is_holiday(self, timestamp: datetime) -> bool:
+        """Check if the date is a holiday using cached data."""
+        if not self._api_key:
             return False
+        
+        date_str = timestamp.strftime("%Y-%m-%d")
+        
+        # Check cache
+        if date_str in self._holiday_cache:
+            return self._holiday_cache[date_str]
+        
+        # Not in cache means it's not a holiday (already fetched all holidays for the year)
+        return False
 
     def _calculate_tou_costs(
         self,

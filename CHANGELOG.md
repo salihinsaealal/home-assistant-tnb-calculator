@@ -2,6 +2,29 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [3.1.0] - 2025-10-01
+
+### Fixed
+- **ToU Cost Calculation**: Fixed bug where ToU cost was incorrectly lower than non-ToU during peak hours
+  - Export energy allocation now properly capped at actual export total
+  - Prevents phantom export rebates when export_total is zero
+- **Meter Reset Handling**: Enhanced delta calculation to properly handle daily/monthly meter resets
+
+### Improved
+- **Holiday Caching**: Implemented robust daily API refresh with persistent storage
+  - Fetches entire year of holidays once per day (uses only ~3% of free API quota)
+  - Holiday cache now persists across Home Assistant restarts
+  - Graceful fallback to cached data if API is unavailable
+- **Data Persistence**: Changed storage identifier to use import entity instead of entry_id
+  - Data now survives integration delete/re-add operations
+  - Automatic migration from old storage format for existing users
+  - More reliable data preservation across configuration changes
+
+### Technical
+- Storage format updated to include holiday cache and fetch timestamp
+- Added automatic migration logic for seamless upgrades
+- Improved logging for holiday fetch operations and data migration
+
 ## [2.0.0] - 2024-09-30
 
 ### Major Changes
