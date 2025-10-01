@@ -13,6 +13,9 @@ A Home Assistant integration to calculate your TNB (by Cikgu Saleh) electricity 
 - **Detailed Cost Breakdown**: Get individual sensors for all charges, rebates, and rates for easy bill verification
 - **Monthly Reset**: Automatically resets on the 1st of each month to match TNB billing cycle
 - **Holiday Detection**: Uses Calendarific API to identify Malaysian public holidays for accurate off-peak rates
+- **Persistent Storage**: Monthly data survives Home Assistant restarts, integration updates, and delete/re-add operations
+- **Smart Meter Reset Handling**: Automatically detects and handles daily/monthly meter resets
+- **Verified Accuracy**: Calculations match TNB tariff templates exactly for both ToU and non-ToU
 ## Installation
 
 ### Method 1: HACS (Recommended)

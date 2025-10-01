@@ -2,6 +2,20 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [3.1.4] - 2025-10-01
+
+### Summary
+This release finalizes all critical fixes and improvements from v3.1.0-3.1.3.
+All ToU calculation bugs fixed, data persistence improved, and migration logic enhanced.
+
+### Verified
+- ✅ ToU calculation matches reference Excel template exactly
+- ✅ Non-ToU calculation matches reference template exactly
+- ✅ Storage migration works correctly from v3.0.x to v3.1.x
+- ✅ Data persists across restarts, updates, and delete/re-add
+- ✅ Holiday caching with daily refresh working properly
+- ✅ No ConfigEntryNotReady warnings
+
 ## [3.1.3] - 2025-10-01
 
 ### Fixed
