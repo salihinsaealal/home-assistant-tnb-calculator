@@ -2,7 +2,7 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
-## [3.2.1] - 2025-10-01
+## [3.3.0] - 2025-10-01 (BETA)
 
 ### Fixed
 - **Holiday Compliance**: Fixed holiday detection to match TNB's official 15-holiday list exactly
@@ -10,6 +10,8 @@ All notable changes to TNB Calculator will be documented in this file.
   - ✅ Removed Hari Raya Haji Day 2 - TNB only recognizes 1 day (not 2)
   - ✅ Result: Exactly 15 holidays matching TNB's tariff schedule
   - Dynamic Islamic dates still fetched from Calendarific API annually
+
+**Note**: This is a beta release. Stable v3.2.1 will be released after testing.
 
 ## [3.2.0] - 2025-10-01
 
