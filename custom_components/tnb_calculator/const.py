@@ -72,6 +72,63 @@ BASE_SENSOR_TYPES = {
         "state_class": None,
         "entity_category": None,  # Main entity
     },
+    # Prediction sensors
+    "predicted_monthly_cost": {
+        "name": "Predicted Monthly Cost",
+        "unit": "RM",
+        "device_class": "monetary",
+        "state_class": None,
+        "entity_category": None,  # Main entity
+    },
+    "predicted_monthly_kwh": {
+        "name": "Predicted Monthly Import",
+        "unit": "kWh",
+        "device_class": "energy",
+        "state_class": None,
+        "entity_category": None,  # Main entity
+    },
+    "predicted_from_trend": {
+        "name": "Predicted Cost (Current Trend)",
+        "unit": "RM",
+        "device_class": "monetary",
+        "state_class": None,
+        "entity_category": "diagnostic",
+    },
+    "predicted_from_history": {
+        "name": "Predicted Cost (Historical)",
+        "unit": "RM",
+        "device_class": "monetary",
+        "state_class": None,
+        "entity_category": "diagnostic",
+    },
+    "prediction_confidence": {
+        "name": "Prediction Confidence",
+        "unit": None,
+        "device_class": None,
+        "state_class": None,
+        "entity_category": "diagnostic",
+    },
+    "daily_average_cost": {
+        "name": "Daily Average Cost",
+        "unit": "RM",
+        "device_class": "monetary",
+        "state_class": None,
+        "entity_category": "diagnostic",
+    },
+    "daily_average_kwh": {
+        "name": "Daily Average Consumption",
+        "unit": "kWh",
+        "device_class": "energy",
+        "state_class": None,
+        "entity_category": "diagnostic",
+    },
+    "days_remaining": {
+        "name": "Days Until Reset",
+        "unit": "days",
+        "device_class": None,
+        "state_class": None,
+        "entity_category": "diagnostic",
+    },
     # Secondary cost breakdown
     "peak_cost": {
         "name": "Peak Cost",

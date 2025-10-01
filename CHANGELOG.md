@@ -2,6 +2,53 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [3.2.1] - 2025-10-01
+
+### Fixed
+- **Holiday Compliance**: Fixed holiday detection to match TNB's official 15-holiday list exactly
+  - ✅ Added New Year's Day (Jan 1) - TNB official holiday that Calendarific was missing
+  - ✅ Removed Hari Raya Haji Day 2 - TNB only recognizes 1 day (not 2)
+  - ✅ Result: Exactly 15 holidays matching TNB's tariff schedule
+  - Dynamic Islamic dates still fetched from Calendarific API annually
+
+## [3.2.0] - 2025-10-01
+
+### Added
+- **🔮 Hybrid Cost Prediction System**: Smart end-of-month bill prediction
+  - **Method 2 (Current Trend)**: Projects based on this month's usage pattern with tier-aware calculations
+  - **Method 3 (Historical Average)**: Learns from past 3 months of actual usage
+  - **Hybrid Intelligence**: Automatically weights predictions based on data availability
+    - Early month (days 1-7): 70% history, 30% trend
+    - Mid month (days 8-20): 60% trend, 40% history  
+    - Late month (days 21+): 80% trend, 20% history
+  - **Prediction Confidence**: "High" (3+ months data), "Medium" (1-2 months), "Low" (no history)
+- **New Prediction Sensors** (8 total):
+  - `sensor.tnb_predicted_monthly_cost` - Smart hybrid prediction (main)
+  - `sensor.tnb_predicted_monthly_kwh` - Projected total consumption
+  - `sensor.tnb_predicted_from_trend` - Prediction from current month pattern
+  - `sensor.tnb_predicted_from_history` - Prediction from historical average
+  - `sensor.tnb_prediction_confidence` - Confidence level indicator
+  - `sensor.tnb_daily_average_cost` - Average daily cost
+  - `sensor.tnb_daily_average_kwh` - Average daily consumption
+  - `sensor.tnb_days_remaining` - Days until monthly reset
+- **Historical Data Storage**: Automatically saves last 12 months of usage data
+  - Stores: total kWh, cost, peak/offpeak split, export
+  - Saved at end of each month before reset
+  - Used for trend analysis and improved predictions
+
+### Improved
+- **Smarter Predictions**: Accounts for TNB tariff tier changes (600 kWh, 1500 kWh thresholds)
+- **Automatic Learning**: Gets more accurate each month as historical data builds up
+- **Peak/Off-Peak Aware**: Maintains your actual usage patterns in projections
+
+### Technical
+- Added `calendar` module import for month calculations
+- Added `_historical_months` storage dictionary
+- Added `_last_calculated_cost` tracking for historical data
+- Enhanced `_month_changed()` to save historical data before reset
+- New `_calculate_predictions()` method with hybrid algorithm
+- Storage format v3: includes `historical_months` field
+
 ## [3.1.4] - 2025-10-01
 
 ### Summary

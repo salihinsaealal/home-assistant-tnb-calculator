@@ -104,8 +104,12 @@ After setup, these sensors will be created:
 
 ### Holiday Detection (ToU only)
 - Uses Calendarific API to check Malaysian holidays
+- **Matches TNB's official 15-holiday list exactly**:
+  - Hari Tahun Baharu, Chinese New Year (2 days), Hari Raya Aidilfitri (2 days)
+  - Hari Pekerja, Wesak, Yang di-Pertuan Agong's Birthday, Hari Raya Haji (1 day)
+  - Awal Muharram, Hari Kemerdekaan, Hari Malaysia, Maulidur Rasul, Deepavali, Krismas
 - Automatically applies off-peak rates on holidays
-- Reduces your electricity bill on public holidays
+- Islamic dates dynamically updated annually from Calendarific API
 
 ## Usage Examples
 

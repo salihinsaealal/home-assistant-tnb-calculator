@@ -1,4 +1,5 @@
 """Sensor platform for TNB Calculator integration."""
+import calendar
 import logging
 from datetime import datetime, time, timedelta
 from typing import Any, Dict, Optional
@@ -82,7 +83,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.1.4",
+        sw_version="3.2.0",
     )
 
     sensors = [
@@ -142,6 +143,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         _LOGGER.debug("Using storage key: %s", f"{STORAGE_KEY}_{storage_id}")
         self._monthly_data_loaded = False
         self._holiday_data_loaded = False
+        self._historical_months: Dict[str, Dict[str, float]] = {}
+        self._last_calculated_cost = 0.0
 
     async def _load_monthly_data(self) -> None:
         """Load monthly data from storage."""
@@ -192,9 +195,14 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 self._holiday_data_loaded = True
                 _LOGGER.debug("Loaded %d holidays from storage, last fetch: %s", 
                              len(self._holiday_cache), self._last_holiday_fetch)
+            
+            # Load historical data
+            self._historical_months = stored_data.get("historical_months", {})
+            _LOGGER.debug("Loaded %d months of historical data", len(self._historical_months))
         else:
             self._holiday_cache = {}
             self._last_holiday_fetch = None
+            self._historical_months = {}
             
         self._monthly_data_loaded = True
 
@@ -205,9 +213,12 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 "monthly_data": self._monthly_data,
                 "holiday_cache": getattr(self, "_holiday_cache", {}),
                 "last_holiday_fetch": getattr(self, "_last_holiday_fetch", None),
+                "historical_months": getattr(self, "_historical_months", {}),
             }
             await self._store.async_save(storage_data)
-            _LOGGER.debug("Saved data to storage: monthly + %d holidays", len(getattr(self, "_holiday_cache", {})))
+            _LOGGER.debug("Saved data to storage: monthly + %d holidays + %d historical months", 
+                         len(getattr(self, "_holiday_cache", {})),
+                         len(getattr(self, "_historical_months", {})))
 
     async def _async_update_data(self) -> Dict[str, Any]:
         """Fetch data from Home Assistant entities and calculate TNB costs."""
@@ -323,6 +334,13 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 result["peak_cost"] = non_tou_costs.get("peak_cost", 0.0)
                 result["off_peak_cost"] = non_tou_costs.get("off_peak_cost", 0.0)
 
+            # Store last calculated cost for historical tracking
+            self._last_calculated_cost = result.get("total_cost_tou" if self._tou_enabled else "total_cost_non_tou", 0.0)
+            
+            # Calculate predictions
+            prediction_data = self._calculate_predictions(now, monthly_import, monthly_peak, monthly_offpeak, monthly_export)
+            result.update(prediction_data)
+
             return result
 
         except Exception as ex:
@@ -343,13 +361,38 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             return 0.0
 
     def _month_changed(self, now: datetime) -> bool:
-        """Check if we've moved to a new month."""
+        """Check if we've moved to a new month and save historical data if needed."""
         if not hasattr(self, "_monthly_data"):
             return True
-        return (
+        
+        month_changed = (
             now.month != self._monthly_data["month"]
             or now.year != self._monthly_data["year"]
         )
+        
+        if month_changed and hasattr(self, "_monthly_data"):
+            # Save completed month to historical data before reset
+            month_key = f"{self._monthly_data['year']}-{self._monthly_data['month']:02d}"
+            self._historical_months[month_key] = {
+                "total_kwh": self._monthly_data.get("import_total", 0),
+                "total_cost": self._last_calculated_cost,
+                "peak_kwh": self._monthly_data.get("import_peak", 0),
+                "offpeak_kwh": self._monthly_data.get("import_offpeak", 0),
+                "export_kwh": self._monthly_data.get("export_total", 0),
+            }
+            
+            # Keep only last 12 months
+            if len(self._historical_months) > 12:
+                oldest_keys = sorted(self._historical_months.keys())[:-12]
+                for old_key in oldest_keys:
+                    del self._historical_months[old_key]
+            
+            _LOGGER.info("Saved month %s to historical data: %.2f kWh, RM %.2f",
+                        month_key,
+                        self._historical_months[month_key]["total_kwh"],
+                        self._historical_months[month_key]["total_cost"])
+        
+        return month_changed
 
     def _create_month_bucket(self, now: datetime) -> Dict[str, Any]:
         """Create new monthly data bucket."""
@@ -525,12 +568,26 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                     # Cache all holidays for the year
                     for holiday in holidays:
                         holiday_date = holiday.get("date", {}).get("iso")
+                        holiday_name = holiday.get("name", "").lower()
+                        
+                        # Skip Hari Raya Haji Day 2 - TNB only recognizes 1 day
+                        if holiday_date and "haji" in holiday_name and "day 2" in holiday_name:
+                            _LOGGER.debug("Skipping %s (TNB only recognizes 1 day of Hari Raya Haji)", holiday_date)
+                            continue
+                            
                         if holiday_date:
                             self._holiday_cache[holiday_date] = True
                     
+                    # Add TNB-specific holidays that Calendarific misses
+                    # New Year's Day is always a TNB holiday but not in Calendarific's "national" type
+                    new_year_date = f"{timestamp.year}-01-01"
+                    if new_year_date not in self._holiday_cache:
+                        self._holiday_cache[new_year_date] = True
+                        _LOGGER.info("Added New Year's Day %s (TNB official holiday)", new_year_date)
+                    
                     self._last_holiday_fetch = now.isoformat()
                     await self._save_monthly_data()
-                    _LOGGER.info("Successfully cached %d holidays for %s", 
+                    _LOGGER.info("Successfully cached %d holidays for %s (matching TNB's 15 official holidays)", 
                                len([k for k in self._holiday_cache.keys() if k.startswith(year_prefix)]),
                                timestamp.year)
                 else:
@@ -696,6 +753,127 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             "peak_cost": self._round_currency(0.0),
             "off_peak_cost": self._round_currency(total_import_caj),
         }
+
+    def _calculate_predictions(
+        self,
+        now: datetime,
+        monthly_import: float,
+        monthly_peak: float,
+        monthly_offpeak: float,
+        monthly_export: float,
+    ) -> Dict[str, Any]:
+        """Calculate hybrid cost predictions (Method 2 + Method 3)."""
+        days_elapsed = now.day
+        days_in_month = calendar.monthrange(now.year, now.month)[1]
+        days_remaining = days_in_month - days_elapsed
+        
+        # Initialize predictions
+        predictions = {
+            "predicted_monthly_cost": 0.0,
+            "predicted_monthly_kwh": 0.0,
+            "predicted_from_trend": None,
+            "predicted_from_history": None,
+            "prediction_confidence": "Low",
+            "daily_average_cost": 0.0,
+            "daily_average_kwh": 0.0,
+            "days_remaining": days_remaining,
+        }
+        
+        if days_elapsed == 0:
+            return predictions
+        
+        # Calculate daily averages
+        daily_avg_kwh = monthly_import / days_elapsed
+        current_cost = self._last_calculated_cost
+        daily_avg_cost = current_cost / days_elapsed
+        
+        predictions["daily_average_kwh"] = self._round_energy(daily_avg_kwh)
+        predictions["daily_average_cost"] = self._round_currency(daily_avg_cost)
+        
+        # METHOD 2: Current trend prediction (tiered rate aware)
+        projected_import = (monthly_import / days_elapsed) * days_in_month
+        predictions["predicted_monthly_kwh"] = self._round_energy(projected_import)
+        
+        if self._tou_enabled:
+            # Maintain peak/offpeak ratio
+            if monthly_import > 0:
+                peak_ratio = monthly_peak / monthly_import
+            else:
+                peak_ratio = 0.6  # Default 60% peak
+            
+            proj_peak = projected_import * peak_ratio
+            proj_offpeak = projected_import * (1 - peak_ratio)
+            proj_export = monthly_export  # Assume export stays constant
+            
+            trend_costs = self._calculate_tou_costs(proj_peak, proj_offpeak, proj_export)
+            trend_prediction = trend_costs["total_cost"]
+        else:
+            trend_costs = self._calculate_non_tou_costs(projected_import, monthly_export)
+            trend_prediction = trend_costs["total_cost"]
+        
+        predictions["predicted_from_trend"] = self._round_currency(trend_prediction)
+        
+        # METHOD 3: Historical average prediction (if available)
+        historical_prediction = None
+        if len(self._historical_months) >= 2:
+            # Average of last 3 months (or fewer if not available)
+            recent_months = list(self._historical_months.values())[-3:]
+            avg_historical_kwh = sum(m["total_kwh"] for m in recent_months) / len(recent_months)
+            
+            # Calculate cost at historical average
+            if self._tou_enabled:
+                # Use current peak/offpeak ratio
+                if monthly_import > 0:
+                    peak_ratio = monthly_peak / monthly_import
+                else:
+                    # Use historical ratio if available
+                    hist_peak_ratio = sum(m.get("peak_kwh", 0) for m in recent_months) / sum(m.get("total_kwh", 1) for m in recent_months)
+                    peak_ratio = hist_peak_ratio if hist_peak_ratio > 0 else 0.6
+                
+                hist_peak = avg_historical_kwh * peak_ratio
+                hist_offpeak = avg_historical_kwh * (1 - peak_ratio)
+                hist_export = sum(m.get("export_kwh", 0) for m in recent_months) / len(recent_months)
+                
+                hist_costs = self._calculate_tou_costs(hist_peak, hist_offpeak, hist_export)
+                historical_prediction = hist_costs["total_cost"]
+            else:
+                hist_export = sum(m.get("export_kwh", 0) for m in recent_months) / len(recent_months)
+                hist_costs = self._calculate_non_tou_costs(avg_historical_kwh, hist_export)
+                historical_prediction = hist_costs["total_cost"]
+            
+            predictions["predicted_from_history"] = self._round_currency(historical_prediction)
+            
+            # HYBRID: Weighted prediction based on days elapsed
+            if days_elapsed < 7:
+                # Early month: trust history more (70% history, 30% trend)
+                weight_trend = 0.3
+            elif days_elapsed > 20:
+                # Late month: trust current trend more (80% trend, 20% history)
+                weight_trend = 0.8
+            else:
+                # Mid month: balanced (60% trend, 40% history)
+                weight_trend = 0.6
+            
+            weight_history = 1 - weight_trend
+            hybrid_prediction = (trend_prediction * weight_trend + 
+                               historical_prediction * weight_history)
+            
+            predictions["predicted_monthly_cost"] = self._round_currency(hybrid_prediction)
+            
+            # Set confidence level
+            months_count = len(self._historical_months)
+            if months_count >= 3:
+                predictions["prediction_confidence"] = "High"
+            elif months_count >= 1:
+                predictions["prediction_confidence"] = "Medium"
+            else:
+                predictions["prediction_confidence"] = "Low"
+        else:
+            # No history: use Method 2 only
+            predictions["predicted_monthly_cost"] = self._round_currency(trend_prediction)
+            predictions["prediction_confidence"] = "Low" if days_elapsed < 7 else "Medium"
+        
+        return predictions
 
 
 class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
