@@ -11,6 +11,7 @@ from homeassistant.const import (
     CONF_NAME,
     UnitOfEnergy,
 )
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -72,7 +73,11 @@ async def async_setup_entry(
     config["entry_id"] = config_entry.entry_id
 
     coordinator = TNBDataCoordinator(hass, config)
-    await coordinator.async_config_entry_first_refresh()
+    
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except Exception as err:
+        raise ConfigEntryNotReady(f"Failed to initialize TNB Calculator: {err}") from err
 
     # Create device registry entry
     device_registry = dr.async_get(hass)
@@ -82,7 +87,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.1.0",
+        sw_version="3.1.1",
     )
 
     sensors = [
@@ -131,9 +136,15 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         
         # Setup persistent storage with stable identifier
         # Use import entity as stable key so data survives delete/re-add
-        storage_id = self._import_entity.replace(".", "_").replace("sensor_", "") if self._import_entity else "default"
+        if self._import_entity:
+            storage_id = self._import_entity.replace(".", "_").replace("sensor_", "")
+        else:
+            _LOGGER.warning("No import entity configured, using default storage")
+            storage_id = "default"
+        
         self._store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}_{storage_id}")
         self._entry_id = config.get('entry_id')
+        _LOGGER.debug("Using storage key: %s", f"{STORAGE_KEY}_{storage_id}")
         self._monthly_data_loaded = False
         self._holiday_data_loaded = False
 
@@ -699,7 +710,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "3.0.4",
+            "sw_version": "3.1.1",
         }
 
     @property
