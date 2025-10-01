@@ -161,7 +161,13 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         
         if stored_data:
             _LOGGER.debug("Loaded monthly data from storage: %s", stored_data)
-            self._monthly_data = stored_data.get("monthly_data", {})
+            monthly_data = stored_data.get("monthly_data", {})
+            
+            # Only load monthly_data if it has required keys
+            if monthly_data and "month" in monthly_data and "year" in monthly_data:
+                self._monthly_data = monthly_data
+            else:
+                _LOGGER.debug("No valid monthly data in storage, will create new bucket")
             
             # Load holiday cache from storage
             if not self._holiday_data_loaded:
