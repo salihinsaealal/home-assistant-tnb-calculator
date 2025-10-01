@@ -2,7 +2,14 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
-## [3.3.0] - 2025-10-01 (BETA)
+## [3.3.0] - 2025-10-01 ⭐ **STABLE RELEASE**
+
+### Added
+- **🔮 Hybrid Cost Prediction System**: Smart end-of-month bill prediction (from v3.2.0)
+  - Method 2 (Current Trend) + Method 3 (Historical Average)
+  - 8 new prediction sensors with automatic learning
+  - Tier-aware calculations (600 kWh, 1500 kWh thresholds)
+  - Confidence indicators (High/Medium/Low)
 
 ### Fixed
 - **Holiday Compliance**: Fixed holiday detection to match TNB's official 15-holiday list exactly
@@ -11,7 +18,10 @@ All notable changes to TNB Calculator will be documented in this file.
   - ✅ Result: Exactly 15 holidays matching TNB's tariff schedule
   - Dynamic Islamic dates still fetched from Calendarific API annually
 
-**Note**: This is a beta release. Stable v3.2.1 will be released after testing.
+### Technical
+- Historical data storage (last 12 months)
+- Enhanced month-end processing
+- Automatic data migration from v3.1.x
 
 ## [3.2.0] - 2025-10-01
 

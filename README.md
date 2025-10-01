@@ -6,6 +6,14 @@
 
 A Home Assistant integration to calculate your TNB (by Cikgu Saleh) electricity costs in Malaysia. Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billing calculations.
 
+## ⭐ What's New in v3.3.0
+
+- **🔮 Hybrid Cost Prediction**: Smart bill forecasting that learns from your usage patterns
+- **📊 8 New Sensors**: Daily averages, projected costs, confidence indicators
+- **🎯 TNB Holiday Compliance**: Fixed to match official 15-holiday schedule
+- **📈 Historical Learning**: Gets smarter each month (stores last 12 months)
+- **✅ Verified Accuracy**: Calculations match TNB tariff templates exactly
+
 ## Features
 
 - **Automatic ToU Detection**: Simply provide your Calendarific API key to enable Time of Use calculations
