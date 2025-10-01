@@ -9,6 +9,13 @@ master (v3.1.4)          ← Production (users get this)
   └─ beta (v3.2.1-beta)  ← Testing (you test this)
 ```
 
+### Important: How HACS Detects Beta Versions
+
+- ✅ **manifest.json** has `"version": "3.2.1"` (NOT "3.2.1-beta")
+- ✅ **GitHub tag** is `v3.2.1-beta` 
+- ✅ **GitHub release** must be marked as "pre-release"
+- ✅ HACS uses the **pre-release flag** to determine beta status, not the version string
+
 ## For Users (Default Installation)
 Users will automatically get: **v3.1.4** (stable)
 
