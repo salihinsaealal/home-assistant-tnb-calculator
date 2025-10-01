@@ -1,10 +1,10 @@
 #!/bin/bash
-# Create GitHub Release for v3.2.1-beta
-# Note: The manifest.json has version "3.2.1" (not "3.2.1-beta")
+# Create GitHub Release for v3.2.1 (as beta/pre-release)
+# Note: HACS requires clean semantic version tags (v3.2.1, not v3.2.1-beta)
 # HACS determines beta status from the GitHub release pre-release flag
 
-gh release create v3.2.1-beta \
-  --title "v3.2.1-beta - TNB Holiday Compliance Fix (BETA)" \
+gh release create v3.2.1 \
+  --title "v3.2.1 - TNB Holiday Compliance Fix (BETA)" \
   --notes "## ⚠️ BETA VERSION - For Testing Only
 
 This is a beta release for testing. Production users should use v3.1.4.
@@ -33,4 +33,4 @@ If you encounter issues, redownload v3.1.4 (disable \"Show beta versions\")
   --target beta
 
 echo "✅ Beta release created!"
-echo "View at: https://github.com/salihinsaealal/home-assistant-tnb-calculator/releases/tag/v3.2.1-beta"
+echo "View at: https://github.com/salihinsaealal/home-assistant-tnb-calculator/releases/tag/v3.2.1"

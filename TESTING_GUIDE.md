@@ -6,15 +6,15 @@
 
 ```
 master (v3.1.4)          ← Production (users get this)
-  └─ beta (v3.2.1-beta)  ← Testing (you test this)
+  └─ beta (v3.2.1)       ← Testing (you test this)
 ```
 
 ### Important: How HACS Detects Beta Versions
 
-- ✅ **manifest.json** has `"version": "3.2.1"` (NOT "3.2.1-beta")
-- ✅ **GitHub tag** is `v3.2.1-beta` 
+- ✅ **manifest.json** has `"version": "3.2.1"` (clean semantic version)
+- ✅ **GitHub tag** is `v3.2.1` (NOT `v3.2.1-beta` - HACS rejects suffixes)
 - ✅ **GitHub release** must be marked as "pre-release"
-- ✅ HACS uses the **pre-release flag** to determine beta status, not the version string
+- ✅ HACS uses the **pre-release flag** to determine beta status, not the tag name
 
 ## For Users (Default Installation)
 Users will automatically get: **v3.1.4** (stable)
@@ -28,7 +28,7 @@ Users will automatically get: **v3.1.4** (stable)
 3. Find **TNB Calculator**
 4. Click **⋮** (three dots) → **Redownload**
 5. Enable **"Show beta versions"** toggle
-6. Select **v3.2.1-beta**
+6. Select **v3.2.1** (will show as beta/pre-release)
 7. Click **Download**
 8. Restart Home Assistant
 
