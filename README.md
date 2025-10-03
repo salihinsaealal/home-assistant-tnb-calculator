@@ -17,7 +17,7 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v3.4.1
+## ⭐ What's New in v3.4.2
 
 - **📅 Daily Usage Tracking**: Monitor today's consumption and costs in real-time
 - **🤖 Automation Helpers**: Binary sensors for peak period, high usage alerts, holidays

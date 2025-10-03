@@ -83,7 +83,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.4.1",
+        sw_version="3.4.2",
     )
 
     sensors = [
@@ -278,6 +278,18 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 self._monthly_data["export_total"] += export_delta
                 data_changed = True
 
+            # Save data after changes
+            if data_changed:
+                await self._save_monthly_data()
+
+            self._state["timestamp"] = now
+
+            # Get monthly totals (must be BEFORE daily calculations that use them)
+            monthly_import = self._monthly_data["import_total"]
+            monthly_export = self._monthly_data["export_total"]
+            monthly_peak = self._monthly_data["import_peak"]
+            monthly_offpeak = self._monthly_data["import_offpeak"]
+
             # Update daily data (always set to current delta from midnight)
             if daily_import_delta >= 0:  # Handle meter resets
                 self._daily_data["import_total"] = daily_import_delta
@@ -299,22 +311,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                             offpeak_ratio = 0.4
                         self._daily_data["import_peak"] = daily_import_delta * (1 - offpeak_ratio)
                         self._daily_data["import_offpeak"] = daily_import_delta * offpeak_ratio
-                data_changed = True
             
             if daily_export_delta >= 0:
                 self._daily_data["export_total"] = daily_export_delta
-                data_changed = True
-
-            # Save data after changes
-            if data_changed:
-                await self._save_monthly_data()
-
-            self._state["timestamp"] = now
-
-            monthly_import = self._monthly_data["import_total"]
-            monthly_export = self._monthly_data["export_total"]
-            monthly_peak = self._monthly_data["import_peak"]
-            monthly_offpeak = self._monthly_data["import_offpeak"]
 
             # Determine day status (Weekday/Weekend/Holiday)
             if is_holiday:
@@ -1012,7 +1011,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "3.4.1",
+            "sw_version": "3.4.2",
         }
 
     @property

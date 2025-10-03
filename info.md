@@ -1,4 +1,4 @@
-# TNB Calculator for Home<div align="center">
+<div align="center">
 
 <img src="https://raw.githubusercontent.com/salihinsaealal/home-assistant-tnb-calculator/master/energyMonitoringicon.png" alt="TNB Calculator" width="120"/>
 
@@ -6,7 +6,9 @@
 
 **Calculate your TNB electricity costs in Malaysia**
 
-</div> Berhad) electricity costs in Malaysia. Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billing calculations.
+</div>
+
+A Home Assistant integration to calculate your TNB (Tenaga Nasional Berhad) electricity costs in Malaysia. Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billing calculations.
 
 ## Features
 
@@ -18,13 +20,14 @@
 - **Smart Meter Reset Handling**: Automatically detects and handles daily/monthly meter resets
 - **Verified Accuracy**: Calculations match TNB tariff templates exactly for both ToU and non-ToU
 
-## What's New in v3.3.0
+## What's New in v3.4.2
 
-- **🔮 Hybrid Cost Prediction**: Smart bill forecasting that learns from your usage patterns
-- **📊 8 New Sensors**: Daily averages, projected costs, confidence indicators
-- **🎯 TNB Holiday Compliance**: Fixed to match official 15-holiday schedule
-- **📈 Historical Learning**: Gets smarter each month (stores last 12 months)
-- **✅ Verified Accuracy**: Calculations match TNB tariff templates exactly
+- **📅 Daily Usage Tracking**: Monitor today's consumption and costs in real-time
+- **🤖 Automation Helpers**: Binary sensors for peak period, high usage alerts, holidays
+- **📊 11 New Sensors**: Today's import/export, costs, tier status, and more
+- **🔮 Smart Predictions**: Hybrid cost forecasting with historical learning
+- **🎯 TNB Compliance**: Exact 15-holiday schedule matching TNB tariff
+- **🔧 Bug Fixes**: Fixed variable scope error in daily tracking
 
 ## Configuration
 

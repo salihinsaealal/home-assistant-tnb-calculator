@@ -2,6 +2,14 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [3.4.2] - 2025-10-03
+
+### Fixed
+- **Critical Bug**: Fixed "cannot access local variable 'monthly_import'" error
+  - Moved monthly variable definitions BEFORE daily calculations that use them
+  - Daily tracking now works correctly without crashes
+  - Error occurred when daily data tried to use monthly_import before it was defined
+
 ## [3.4.1] - 2025-10-03
 
 ### Fixed
