@@ -83,7 +83,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.3.0",
+        sw_version="3.4.0",
     )
 
     sensors = [
@@ -145,6 +145,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         self._holiday_data_loaded = False
         self._historical_months: Dict[str, Dict[str, float]] = {}
         self._last_calculated_cost = 0.0
+        self._daily_data: Dict[str, Any] = {}
+        self._daily_data_loaded = False
 
     async def _load_monthly_data(self) -> None:
         """Load monthly data from storage."""
@@ -199,10 +201,18 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             # Load historical data
             self._historical_months = stored_data.get("historical_months", {})
             _LOGGER.debug("Loaded %d months of historical data", len(self._historical_months))
+            
+            # Load daily data
+            self._daily_data = stored_data.get("daily_data", {})
+            if self._daily_data and "date" in self._daily_data:
+                _LOGGER.debug("Loaded daily data for %s", self._daily_data["date"])
+            self._daily_data_loaded = True
         else:
             self._holiday_cache = {}
             self._last_holiday_fetch = None
             self._historical_months = {}
+            self._daily_data = {}
+            self._daily_data_loaded = True
             
         self._monthly_data_loaded = True
 
@@ -214,9 +224,10 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 "holiday_cache": getattr(self, "_holiday_cache", {}),
                 "last_holiday_fetch": getattr(self, "_last_holiday_fetch", None),
                 "historical_months": getattr(self, "_historical_months", {}),
+                "daily_data": getattr(self, "_daily_data", {}),
             }
             await self._store.async_save(storage_data)
-            _LOGGER.debug("Saved data to storage: monthly + %d holidays + %d historical months", 
+            _LOGGER.debug("Saved data to storage: monthly + daily + %d holidays + %d historical months", 
                          len(getattr(self, "_holiday_cache", {})),
                          len(getattr(self, "_historical_months", {})))
 
@@ -235,8 +246,17 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 self._monthly_data = self._create_month_bucket(now)
                 await self._save_monthly_data()
 
+            # Check and reset daily data if day changed
+            if not hasattr(self, "_daily_data") or self._day_changed(now):
+                self._daily_data = self._create_day_bucket(now)
+                await self._save_monthly_data()
+
             import_delta = self._compute_delta(import_total, "import_last")
             export_delta = self._compute_delta(export_total, "export_last")
+            
+            # Compute daily deltas (from midnight start)
+            daily_import_delta = import_total - self._daily_data.get("import_start", import_total)
+            daily_export_delta = export_total - self._daily_data.get("export_start", export_total)
 
             is_holiday = False
             if self._tou_enabled:
@@ -256,6 +276,33 @@ class TNBDataCoordinator(DataUpdateCoordinator):
 
             if export_delta > 0:
                 self._monthly_data["export_total"] += export_delta
+                data_changed = True
+
+            # Update daily data (always set to current delta from midnight)
+            if daily_import_delta >= 0:  # Handle meter resets
+                self._daily_data["import_total"] = daily_import_delta
+                if self._tou_enabled:
+                    # Estimate peak/offpeak split for today based on current period
+                    # This is approximate - we don't track historical intraday splits
+                    if self._is_peak_period(now, is_holiday):
+                        # Rough estimate: assume proportional to monthly ratio
+                        if monthly_import > 0:
+                            peak_ratio = monthly_peak / monthly_import
+                        else:
+                            peak_ratio = 0.6
+                        self._daily_data["import_peak"] = daily_import_delta * peak_ratio
+                        self._daily_data["import_offpeak"] = daily_import_delta * (1 - peak_ratio)
+                    else:
+                        if monthly_import > 0:
+                            offpeak_ratio = monthly_offpeak / monthly_import
+                        else:
+                            offpeak_ratio = 0.4
+                        self._daily_data["import_peak"] = daily_import_delta * (1 - offpeak_ratio)
+                        self._daily_data["import_offpeak"] = daily_import_delta * offpeak_ratio
+                data_changed = True
+            
+            if daily_export_delta >= 0:
+                self._daily_data["export_total"] = daily_export_delta
                 data_changed = True
 
             # Save data after changes
@@ -340,6 +387,41 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             # Calculate predictions
             prediction_data = self._calculate_predictions(now, monthly_import, monthly_peak, monthly_offpeak, monthly_export)
             result.update(prediction_data)
+            
+            # Add daily usage sensors
+            daily_import = self._daily_data.get("import_total", 0.0)
+            daily_export = self._daily_data.get("export_total", 0.0)
+            daily_peak = self._daily_data.get("import_peak", 0.0)
+            daily_offpeak = self._daily_data.get("import_offpeak", 0.0)
+            
+            result["today_import_kwh"] = self._round_energy(daily_import)
+            result["today_export_kwh"] = self._round_energy(daily_export)
+            result["today_net_kwh"] = self._round_energy(daily_import - daily_export)
+            result["today_import_peak_kwh"] = self._round_energy(daily_peak)
+            result["today_import_offpeak_kwh"] = self._round_energy(daily_offpeak)
+            
+            # Calculate today's costs
+            daily_tou_costs = self._calculate_tou_costs(daily_peak, daily_offpeak, daily_export)
+            daily_non_tou_costs = self._calculate_non_tou_costs(daily_import, daily_export)
+            result["today_cost_tou"] = daily_tou_costs["total_cost"]
+            result["today_cost_non_tou"] = daily_non_tou_costs["total_cost"]
+            
+            # Binary sensors for automations
+            result["peak_period"] = "on" if self._is_peak_period(now, is_holiday) else "off"
+            result["holiday_today"] = "on" if is_holiday else "off"
+            
+            # High usage alert (approaching 600 kWh tier)
+            usage_threshold = 550  # Alert at 550 kWh (50 kWh before tier change)
+            result["high_usage_alert"] = "on" if monthly_import >= usage_threshold else "off"
+            
+            # Tier status
+            if monthly_import < 600:
+                tier_status = "Below 600 kWh"
+            elif monthly_import < 1500:
+                tier_status = "600-1500 kWh"
+            else:
+                tier_status = "Above 1500 kWh"
+            result["tier_status"] = tier_status
 
             return result
 
@@ -405,6 +487,31 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             "import_offpeak": 0.0,
             "import_last": self._get_entity_state(self._import_entity),
             "export_last": self._get_entity_state(self._export_entity),
+        }
+
+    def _day_changed(self, now: datetime) -> bool:
+        """Check if day changed and reset daily data if needed."""
+        if not hasattr(self, "_daily_data") or not self._daily_data:
+            return True
+        
+        day_changed = now.date().isoformat() != self._daily_data.get("date")
+        
+        if day_changed:
+            _LOGGER.info("Day changed from %s to %s, resetting daily counters",
+                        self._daily_data.get("date"), now.date().isoformat())
+        
+        return day_changed
+
+    def _create_day_bucket(self, now: datetime) -> Dict[str, Any]:
+        """Create new daily data bucket."""
+        return {
+            "date": now.date().isoformat(),
+            "import_total": 0.0,
+            "export_total": 0.0,
+            "import_peak": 0.0,
+            "import_offpeak": 0.0,
+            "import_start": self._get_entity_state(self._import_entity),
+            "export_start": self._get_entity_state(self._export_entity),
         }
 
     def _compute_delta(self, current_value: float, last_key: str) -> float:

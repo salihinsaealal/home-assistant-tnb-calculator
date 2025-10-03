@@ -129,6 +129,86 @@ BASE_SENSOR_TYPES = {
         "state_class": None,
         "entity_category": "diagnostic",
     },
+    # Daily usage sensors (today's consumption)
+    "today_import_kwh": {
+        "name": "Today Import",
+        "unit": "kWh",
+        "device_class": "energy",
+        "state_class": "total_increasing",
+        "entity_category": None,  # Main entity
+    },
+    "today_export_kwh": {
+        "name": "Today Export",
+        "unit": "kWh",
+        "device_class": "energy",
+        "state_class": "total_increasing",
+        "entity_category": None,  # Main entity
+    },
+    "today_net_kwh": {
+        "name": "Today Net Usage",
+        "unit": "kWh",
+        "device_class": "energy",
+        "state_class": "measurement",
+        "entity_category": None,  # Main entity
+    },
+    "today_cost_tou": {
+        "name": "Today Cost (ToU)",
+        "unit": "RM",
+        "device_class": "monetary",
+        "state_class": "measurement",
+        "entity_category": None,  # Main entity
+    },
+    "today_cost_non_tou": {
+        "name": "Today Cost (Non-ToU)",
+        "unit": "RM",
+        "device_class": "monetary",
+        "state_class": "measurement",
+        "entity_category": None,  # Main entity
+    },
+    "today_import_peak_kwh": {
+        "name": "Today Import Peak",
+        "unit": "kWh",
+        "device_class": "energy",
+        "state_class": "total_increasing",
+        "entity_category": "diagnostic",
+    },
+    "today_import_offpeak_kwh": {
+        "name": "Today Import Off-Peak",
+        "unit": "kWh",
+        "device_class": "energy",
+        "state_class": "total_increasing",
+        "entity_category": "diagnostic",
+    },
+    # Binary sensors for automations
+    "peak_period": {
+        "name": "Peak Period",
+        "unit": None,
+        "device_class": None,
+        "state_class": None,
+        "entity_category": None,  # Main entity (for automations)
+    },
+    "high_usage_alert": {
+        "name": "High Usage Alert",
+        "unit": None,
+        "device_class": None,
+        "state_class": None,
+        "entity_category": None,  # Main entity (for automations)
+    },
+    "holiday_today": {
+        "name": "Holiday Today",
+        "unit": None,
+        "device_class": None,
+        "state_class": None,
+        "entity_category": None,  # Main entity (for automations)
+    },
+    # Status sensors
+    "tier_status": {
+        "name": "Usage Tier",
+        "unit": None,
+        "device_class": None,
+        "state_class": None,
+        "entity_category": None,  # Main entity
+    },
     # Secondary cost breakdown
     "peak_cost": {
         "name": "Peak Cost",

@@ -2,6 +2,37 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [3.4.0] - 2025-10-03
+
+### Added
+- **📅 Daily Usage Tracking**: Track today's consumption and costs
+  - `sensor.tnb_today_import_kwh` - Today's total import
+  - `sensor.tnb_today_export_kwh` - Today's total export  
+  - `sensor.tnb_today_net_kwh` - Today's net usage
+  - `sensor.tnb_today_cost_tou` - Today's cost (ToU)
+  - `sensor.tnb_today_cost_non_tou` - Today's cost (Non-ToU)
+  - `sensor.tnb_today_import_peak_kwh` - Today's peak import (diagnostic)
+  - `sensor.tnb_today_import_offpeak_kwh` - Today's off-peak import (diagnostic)
+  
+- **🤖 Automation Helpers**: Binary sensors for smart automations
+  - `sensor.tnb_peak_period` - Currently in peak hours (on/off)
+  - `sensor.tnb_high_usage_alert` - Approaching 600 kWh tier (on/off)
+  - `sensor.tnb_holiday_today` - Today is a public holiday (on/off)
+  
+- **📊 Status Sensors**:
+  - `sensor.tnb_tier_status` - Current usage tier ("Below 600 kWh", "600-1500 kWh", "Above 1500 kWh")
+
+### Improved
+- **Automatic Daily Reset**: Daily counters reset at midnight automatically
+- **Smart Peak/Off-Peak Estimation**: Daily peak/off-peak split estimated from monthly patterns
+- **Persistent Daily Data**: Today's usage survives restarts
+
+### Technical
+- Added `_daily_data` storage structure
+- Added `_day_changed()` and `_create_day_bucket()` methods
+- Daily data stored alongside monthly data in same storage file
+- Backward compatible with v3.3.0 storage format
+
 ## [3.3.0] - 2025-10-01 ⭐ **STABLE RELEASE**
 
 ### Added
