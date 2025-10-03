@@ -1,12 +1,17 @@
-# TNB Calculator for Home Assistant
+# TNB Calculator for Home<div align="center">
 
-A Home Assistant integration to calculate your TNB (Tenaga Nasional Berhad) electricity costs in Malaysia. Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billing calculations.
+<img src="https://raw.githubusercontent.com/salihinsaealal/home-assistant-tnb-calculator/master/energyMonitoringicon.png" alt="TNB Calculator" width="120"/>
+
+# TNB Calculator
+
+**Calculate your TNB electricity costs in Malaysia**
+
+</div> Berhad) electricity costs in Malaysia. Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billing calculations.
 
 ## Features
 
 - **Automatic ToU Detection**: Simply provide your Calendarific API key to enable Time of Use calculations
 - **Peak/Off-Peak Splitting**: Integration automatically splits your import energy into peak (2PM-10PM weekdays) and off-peak (10PM-2PM + weekends + holidays) based on TNB schedule
-- **Detailed Cost Breakdown**: Get individual sensors for all charges, rebates, and rates for easy bill verification
 - **Monthly Reset**: Automatically resets on the 1st of each month to match TNB billing cycle
 - **Holiday Detection**: Uses Calendarific API to identify Malaysian public holidays for accurate off-peak rates
 - **Persistent Storage**: Monthly data survives Home Assistant restarts, integration updates, and delete/re-add operations

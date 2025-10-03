@@ -1,3 +1,7 @@
+<div align="center">
+
+<img src="energyMonitoringicon.png" alt="TNB Calculator" width="200"/>
+
 # TNB Calculator for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
@@ -5,7 +9,13 @@
 [![License](https://img.shields.io/github/license/salihinsaealal/home-assistant-tnb-calculator.svg)](LICENSE)
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=salihinsaealal&repository=home-assistant-tnb-calculator&category=integration)
 
-A Home Assistant integration to calculate your TNB (by Cikgu Saleh) electricity costs in Malaysia. Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billing calculations.
+**Calculate your TNB (Tenaga Nasional Berhad) electricity costs in Malaysia**
+
+Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billing calculations
+
+</div>
+
+---
 
 ## ⭐ What's New in v3.4.1
 
