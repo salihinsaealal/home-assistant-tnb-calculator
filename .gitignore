@@ -112,3 +112,15 @@ Thumbs.db
 *.db
 *.db-shm
 *.db-wal
+
+# Development & Testing Files (not for public)
+TODO.md
+debug_calc.py
+test_*.py
+TESTING_GUIDE.md
+BETA_SETUP.md
+create_beta_release.sh
+examples.md
+HACS_CHECKLIST.md
+RELEASE_NOTES_*.md
+TNB ToU.xlsx
