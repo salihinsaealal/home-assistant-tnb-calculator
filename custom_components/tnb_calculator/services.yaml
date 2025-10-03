@@ -36,3 +36,15 @@ compare_with_bill:
           max: 2030
           step: 1
           mode: box
+
+reset_storage:
+  name: Reset Stored Data
+  description: Clear cached energy totals, historical months, and cached holidays. Use with caution.
+  fields:
+    confirm:
+      name: Type "RESET" to confirm
+      description: Safety confirmation to prevent accidental resets.
+      required: true
+      example: RESET
+      selector:
+        text:

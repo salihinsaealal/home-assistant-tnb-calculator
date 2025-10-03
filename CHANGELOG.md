@@ -2,6 +2,11 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [3.6.2] - 2025-10-03
+
+### Added
+- **Reset Service**: `tnb_calculator.reset_storage` clears cached totals, historical months, and holidays after typing `RESET` for confirmation.
+
 ## [3.6.1] - 2025-10-03
 
 ### Added

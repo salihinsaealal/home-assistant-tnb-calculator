@@ -6,7 +6,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 import voluptuous as vol
 
@@ -17,11 +17,15 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
-# Service schema
+# Service schemas
 SERVICE_COMPARE_BILL_SCHEMA = vol.Schema({
     vol.Required("actual_bill"): cv.positive_float,
     vol.Optional("month"): vol.All(vol.Coerce(int), vol.Range(min=1, max=12)),
     vol.Optional("year"): vol.All(vol.Coerce(int), vol.Range(min=2020, max=2030)),
+})
+
+SERVICE_RESET_STORAGE_SCHEMA = vol.Schema({
+    vol.Required("confirm"): cv.string,
 })
 
 
@@ -111,6 +115,29 @@ Monthly Export: {coordinator.data.get('export_energy', 0):.2f} kWh
             "compare_with_bill",
             handle_compare_bill,
             schema=SERVICE_COMPARE_BILL_SCHEMA,
+        )
+
+        async def handle_reset_storage(call: ServiceCall) -> None:
+            """Handle clearing stored integration data."""
+            confirmation = call.data.get("confirm", "").strip().upper()
+            if confirmation != "RESET":
+                raise HomeAssistantError("Confirmation string must be 'RESET'")
+
+            coordinator_data = hass.data[DOMAIN].get(entry.entry_id)
+            if not coordinator_data or "coordinator" not in coordinator_data:
+                _LOGGER.error("Could not find TNB Calculator coordinator for reset_storage")
+                return
+
+            coordinator: TNBDataCoordinator = coordinator_data["coordinator"]
+            await coordinator.async_reset_storage()
+            _LOGGER.info("TNB Calculator data reset requested via service")
+            await coordinator.async_request_refresh()
+
+        hass.services.async_register(
+            DOMAIN,
+            "reset_storage",
+            handle_reset_storage,
+            schema=SERVICE_RESET_STORAGE_SCHEMA,
         )
 
         return True

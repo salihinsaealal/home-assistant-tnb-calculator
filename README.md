@@ -17,11 +17,11 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v3.6.1
+## ⭐ What's New in v3.6.2
 
+- **🧼 Reset Service**: Call `tnb_calculator.reset_storage` (type `RESET` to confirm) to clear cached totals, historical months, and holiday data.
+- **📅 Holiday Diagnostics**: `sensor.tnb_cached_holidays_count` lists every cached holiday and the last fetch timestamp as sensor attributes for cross-checking.
 - **✅ Configuration Guardrails**: Setup validates energy sensors and Calendarific API keys with detailed error messages.
-- **📅 Holiday Diagnostics**: `sensor.tnb_cached_holidays_count` now lists every cached holiday and the last fetch timestamp as sensor attributes for easy verification.
-- **🧾 Bill Comparison Service**: Compare your calculated bill with the actual TNB statement and receive a detailed notification.
 - **📅 Daily Usage Tracking**: Monitor today's import/export and costs (from v3.4).
 - **🤖 Automation Helpers**: Binary sensors for peak period, high usage alerts, and holiday detection (from v3.4).
 - **🔮 Smart Predictions**: Hybrid forecast using current trend and historical averages (from v3.3).

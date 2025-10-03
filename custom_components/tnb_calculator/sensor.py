@@ -83,7 +83,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.6.1",
+        sw_version="3.6.2",
     )
 
     sensors = [
@@ -234,6 +234,29 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("Saved data to storage: monthly + daily + %d holidays + %d historical months", 
                          len(getattr(self, "_holiday_cache", {})),
                          len(getattr(self, "_historical_months", {})))
+
+    async def async_reset_storage(self) -> None:
+        """Clear stored data and reset runtime counters."""
+        _LOGGER.info("Resetting TNB Calculator storage and runtime buffers")
+        await self._store.async_remove()
+
+        now = dt_util.now()
+
+        # Reset caches and counters
+        self._holiday_cache = {}
+        self._holiday_data_loaded = True
+        self._last_holiday_fetch = None
+        self._historical_months = {}
+        self._monthly_data = self._create_month_bucket(now)
+        self._monthly_data_loaded = True
+        self._daily_data = self._create_day_bucket(now)
+        self._daily_data_loaded = True
+        self._last_calculated_cost = 0.0
+        self._validation_errors = []
+        self._last_validation_status = "OK"
+
+        await self._save_monthly_data()
+        self.async_set_updated_data({})
 
     async def _async_update_data(self) -> Dict[str, Any]:
         """Fetch data from Home Assistant entities and calculate TNB costs."""
@@ -1073,7 +1096,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "3.6.1",
+            "sw_version": "3.6.2",
         }
 
     @property
