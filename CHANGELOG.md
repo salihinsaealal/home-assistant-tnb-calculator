@@ -2,6 +2,13 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [3.4.1] - 2025-10-03
+
+### Fixed
+- **Manifest Validation**: Removed invalid `homeassistant`, `ssdp`, and `zeroconf` keys from manifest.json
+  - These keys are not allowed in HACS custom integrations
+  - Fixes Hassfest validation errors
+
 ## [3.4.0] - 2025-10-03
 
 ### Added
