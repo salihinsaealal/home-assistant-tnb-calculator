@@ -20,14 +20,11 @@ A Home Assistant integration to calculate your TNB (Tenaga Nasional Berhad) elec
 - **Smart Meter Reset Handling**: Automatically detects and handles daily/monthly meter resets
 - **Verified Accuracy**: Calculations match TNB tariff templates exactly for both ToU and non-ToU
 
-## What's New in v3.4.2
+## What's New in v3.5.1
 
-- **📅 Daily Usage Tracking**: Monitor today's consumption and costs in real-time
-- **🤖 Automation Helpers**: Binary sensors for peak period, high usage alerts, holidays
-- **📊 11 New Sensors**: Today's import/export, costs, tier status, and more
-- **🔮 Smart Predictions**: Hybrid cost forecasting with historical learning
-- **🎯 TNB Compliance**: Exact 15-holiday schedule matching TNB tariff
-- **🔧 Bug Fixes**: Fixed variable scope error in daily tracking
+- **🔍 Diagnostic Sensors Restored**: Storage health, cached holidays, last update, and uptime sensors now appear correctly in Home Assistant.
+- **🧾 Bill Comparison Service**: Call `tnb_calculator.compare_with_bill` to compare your monthly bill with TNB's statement and receive a detailed notification.
+- **📅 Daily Usage Tracking & Automation Helpers**: Today's usage sensors and binary automation helpers introduced in v3.4 remain available.
 
 ## Configuration
 

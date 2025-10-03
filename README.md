@@ -17,32 +17,44 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v3.5.0
+## ⭐ What's New in v3.5.1
 
-- **🔍 Diagnostic Tools**: Health monitoring and troubleshooting sensors
-- **🧾 Bill Comparison Service**: Verify accuracy against actual TNB bill
-- **📅 Daily Usage Tracking**: Monitor today's consumption and costs in real-time
-- **🤖 Automation Helpers**: Binary sensors for peak period, high usage alerts, holidays
-- **🔮 Smart Predictions**: Hybrid cost forecasting with historical learning
-- **🎯 TNB Compliance**: Exact 15-holiday schedule matching TNB tariff
-- **✅ Verified Accuracy**: All calculations match TNB templates exactly
+- **🔍 Diagnostic Sensors Restored**: Storage health, cached holidays, last update, and uptime sensors now register correctly in Home Assistant.
+- **🧾 Bill Comparison Service**: Compare your calculated bill with the actual TNB statement and receive a detailed notification.
+- **📅 Daily Usage Tracking**: Monitor today's import/export and costs (from v3.4).
+- **🤖 Automation Helpers**: Binary sensors for peak period, high usage alerts, and holiday detection (from v3.4).
+- **🔮 Smart Predictions**: Hybrid forecast using current trend and historical averages (from v3.3).
+
 
 ## Features
 
 - **Automatic ToU Detection**: Simply provide your Calendarific API key to enable Time of Use calculations
 - **Peak/Off-Peak Splitting**: Integration automatically splits your import energy into peak (2PM-10PM weekdays) and off-peak (10PM-2PM + weekends + holidays) based on TNB schedule
-- **Detailed Cost Breakdown**: Get individual sensors for all charges, rebates, and rates for easy bill verification
 - **Monthly Reset**: Automatically resets on the 1st of each month to match TNB billing cycle
 - **Holiday Detection**: Uses Calendarific API to identify Malaysian public holidays for accurate off-peak rates
 - **Persistent Storage**: Monthly data survives Home Assistant restarts, integration updates, and delete/re-add operations
 - **Smart Meter Reset Handling**: Automatically detects and handles daily/monthly meter resets
 - **Verified Accuracy**: Calculations match TNB tariff templates exactly for both ToU and non-ToU
+
+## Bill Comparison Service
+
+Compare the calculated bill with your actual TNB invoice and receive a persistent notification summarizing the difference.
+
+```yaml
+service: tnb_calculator.compare_with_bill
+data:
+  actual_bill: 156.50  # RM amount from your bill
+  month: 10            # Optional: billing month (1-12)
+  year: 2025           # Optional: billing year
+```
+- The integration logs the comparison and posts a notification showing the calculated cost, actual bill, absolute difference, and percentage variance.
+- If the difference exceeds ±5%, the notification highlights it so you can investigate.
+
 ## Installation
 
 ### Method 1: HACS (Recommended)
 
 1. Make sure HACS is installed in your Home Assistant
-2. Go to HACS > Integrations
 3. Click the 3 dots menu and select "Custom repositories"
 4. Add this repository URL and select "Integration" as category
 5. Search for "TNB Calculator" and install it
