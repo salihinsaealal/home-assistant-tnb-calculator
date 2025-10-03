@@ -83,7 +83,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.6.0",
+        sw_version="3.6.1",
     )
 
     sensors = [
@@ -430,6 +430,12 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             # Diagnostic sensors
             result["storage_health"] = self._check_storage_health()
             result["cached_holidays_count"] = len(self._holiday_cache)
+            holidays_by_year: Dict[str, list[str]] = {}
+            for date_str in sorted(self._holiday_cache.keys()):
+                year = date_str[:4]
+                holidays_by_year.setdefault(year, []).append(date_str)
+            result["cached_holidays"] = holidays_by_year
+            result["cached_holidays_last_fetch"] = self._last_holiday_fetch
             result["last_update"] = now.isoformat()
             
             # Calculate uptime in hours
@@ -1067,7 +1073,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "3.6.0",
+            "sw_version": "3.6.1",
         }
 
     @property
@@ -1087,6 +1093,8 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "is_holiday": self.coordinator.data.get("is_holiday"),
             "current_month": self.coordinator.data.get("current_month"),
             "monthly_reset_day": self.coordinator.data.get("monthly_reset_day"),
+            "cached_holidays": self.coordinator.data.get("cached_holidays"),
+            "cached_holidays_last_fetch": self.coordinator.data.get("cached_holidays_last_fetch"),
         }
 
         for key in [
