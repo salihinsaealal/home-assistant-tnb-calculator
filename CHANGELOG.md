@@ -2,6 +2,11 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [3.7.1] - 2025-10-03
+
+### Fixed
+- Restored `CONF_YEAR` constant to prevent setup failures on recent Home Assistant versions.
+
 ## [3.7.0] - 2025-10-03
 
 ### Added
