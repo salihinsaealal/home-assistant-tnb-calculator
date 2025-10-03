@@ -2,37 +2,24 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [3.6.0] - 2025-10-03
+
+### Added
+- **Validation Status Sensor**: New diagnostic sensor reporting configuration issues detected at runtime.
+
+### Improved
+- **Config Flow Guardrails**: Import/export entities now validated for device class, state class, units, and numeric state inputs before setup.
+- **Calendarific API Checks**: Setup and options flows provide specific errors for invalid keys, rate limits, timeouts, or connectivity issues.
+- **Runtime Diagnostics**: Coordinator logs validation warnings and exposes them via the `validation_status` sensor.
+
+### Fixed
+- **Graceful Sensor Handling**: Coordinator no longer silently zeroes bad readings— issues are flagged for visibility.
+
 ## [3.5.1] - 2025-10-03
 
 ### Fixed
 - **Diagnostic Sensors**: Resolved Home Assistant entity registry error caused by using string `entity_category` values. Diagnostic sensors are now registered using `EntityCategory.DIAGNOSTIC` and appear correctly after reload.
 - **Version Metadata**: Bumped integration and device `sw_version` to 3.5.1 for accurate reporting.
-
-## [3.5.0] - 2025-10-03
-
-### Added
-- **🔍 Diagnostic Sensors**: Health monitoring and troubleshooting tools
-  - `sensor.tnb_storage_health` - Storage status ("OK", "Missing", "Corrupted")
-  - `sensor.tnb_cached_holidays_count` - Number of holidays in cache
-  - `sensor.tnb_last_update` - Last successful update timestamp
-  - `sensor.tnb_integration_uptime` - Integration uptime in hours
-
-- **🧾 Bill Comparison Service**: Verify calculation accuracy
-  - Service: `tnb_calculator.compare_with_bill`
-  - Compare calculated cost with actual TNB bill
-  - Shows difference and accuracy percentage
-  - Creates persistent notification with breakdown
-
-### Improved
-- **Better Troubleshooting**: Diagnostic sensors help identify issues
-- **Accuracy Verification**: Easy bill comparison via service call
-- **Health Monitoring**: Track integration status and API usage
-
-### Technical
-- Added `_check_storage_health()` method
-- Added `_integration_start_time` and `_last_successful_update` tracking
-- Created `services.yaml` for service definitions
-- Service creates persistent notification with comparison results
 
 ## [3.4.2] - 2025-10-03
 

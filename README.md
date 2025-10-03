@@ -17,9 +17,10 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v3.5.1
+## ⭐ What's New in v3.6.0
 
-- **🔍 Diagnostic Sensors Restored**: Storage health, cached holidays, last update, and uptime sensors now register correctly in Home Assistant.
+- **✅ Configuration Guardrails**: Setup now validates energy sensors and Calendarific API keys with detailed error messages.
+- **🔍 Diagnostic Sensors**: Storage health, cached holidays, last update, and uptime sensors remain available for troubleshooting.
 - **🧾 Bill Comparison Service**: Compare your calculated bill with the actual TNB statement and receive a detailed notification.
 - **📅 Daily Usage Tracking**: Monitor today's import/export and costs (from v3.4).
 - **🤖 Automation Helpers**: Binary sensors for peak period, high usage alerts, and holiday detection (from v3.4).

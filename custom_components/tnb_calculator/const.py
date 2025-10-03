@@ -240,6 +240,13 @@ BASE_SENSOR_TYPES = {
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
+    "validation_status": {
+        "name": "Validation Status",
+        "unit": None,
+        "device_class": None,
+        "state_class": None,
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
     # Secondary cost breakdown
     "peak_cost": {
         "name": "Peak Cost",

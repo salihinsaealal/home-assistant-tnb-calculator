@@ -83,7 +83,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.5.1",
+        sw_version="3.6.0",
     )
 
     sensors = [
@@ -149,6 +149,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         self._daily_data_loaded = False
         self._integration_start_time = dt_util.now()
         self._last_successful_update = None
+        self._validation_errors: list[str] = []
+        self._last_validation_status: str = "OK"
 
     async def _load_monthly_data(self) -> None:
         """Load monthly data from storage."""
@@ -236,13 +238,14 @@ class TNBDataCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> Dict[str, Any]:
         """Fetch data from Home Assistant entities and calculate TNB costs."""
         try:
+            self._validation_errors = []
             now = dt_util.now()
 
             # Load stored data on first run
             await self._load_monthly_data()
 
-            import_total = self._get_entity_state(self._import_entity)
-            export_total = self._get_entity_state(self._export_entity)
+            import_total = self._get_entity_state(self._import_entity, "Import entity")
+            export_total = self._get_entity_state(self._export_entity, "Export entity")
 
             if not hasattr(self, "_monthly_data") or self._month_changed(now):
                 self._monthly_data = self._create_month_bucket(now)
@@ -433,7 +436,11 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             uptime_delta = now - self._integration_start_time
             uptime_hours = uptime_delta.total_seconds() / 3600
             result["integration_uptime"] = round(uptime_hours, 2)
-            
+            result["validation_status"] = (
+                "; ".join(self._validation_errors) if self._validation_errors else "OK"
+            )
+            self._last_validation_status = result["validation_status"]
+
             # Mark successful update
             self._last_successful_update = now
 
@@ -442,18 +449,32 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         except Exception as ex:
             raise UpdateFailed(f"Error updating TNB data: {ex}") from ex
 
-    def _get_entity_state(self, entity_id: Optional[str]) -> float:
+    def _add_validation_error(self, source: str, message: str) -> None:
+        """Record a validation error for diagnostics and logging."""
+        full_message = f"{source}: {message}"
+        if full_message not in self._validation_errors:
+            self._validation_errors.append(full_message)
+            _LOGGER.warning("Validation warning - %s", full_message)
+
+    def _get_entity_state(self, entity_id: Optional[str], source: str) -> float:
         """Get numeric state from entity, return 0.0 if unavailable."""
         if not entity_id:
+            self._add_validation_error(source, "entity not configured")
             return 0.0
-        
+
         state = self.hass.states.get(entity_id)
-        if not state or state.state in ["unknown", "unavailable"]:
+        if state is None:
+            self._add_validation_error(source, f"entity '{entity_id}' not found")
             return 0.0
-        
+
+        if state.state in ["unknown", "unavailable"]:
+            self._add_validation_error(source, f"entity '{entity_id}' state is {state.state}")
+            return 0.0
+
         try:
             return float(state.state)
         except (ValueError, TypeError):
+            self._add_validation_error(source, f"entity '{entity_id}' reported non-numeric state '{state.state}'")
             return 0.0
 
     def _month_changed(self, now: datetime) -> bool:
@@ -499,8 +520,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             "export_total": 0.0,
             "import_peak": 0.0,
             "import_offpeak": 0.0,
-            "import_last": self._get_entity_state(self._import_entity),
-            "export_last": self._get_entity_state(self._export_entity),
+            "import_last": self._get_entity_state(self._import_entity, "Import entity"),
+            "export_last": self._get_entity_state(self._export_entity, "Export entity"),
         }
 
     def _day_changed(self, now: datetime) -> bool:
@@ -524,8 +545,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             "export_total": 0.0,
             "import_peak": 0.0,
             "import_offpeak": 0.0,
-            "import_start": self._get_entity_state(self._import_entity),
-            "export_start": self._get_entity_state(self._export_entity),
+            "import_start": self._get_entity_state(self._import_entity, "Import entity"),
+            "export_start": self._get_entity_state(self._export_entity, "Export entity"),
         }
 
     def _compute_delta(self, current_value: float, last_key: str) -> float:
@@ -1046,7 +1067,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "3.5.1",
+            "sw_version": "3.6.0",
         }
 
     @property

@@ -13,8 +13,23 @@
     },
     "error": {
       "import_entity_required": "Import entity is required",
+      "entity_not_found": "Selected entity no longer exists",
+      "entity_invalid_domain": "Entity must be a sensor or utility meter",
+      "entity_state_missing": "Could not read the current state of the entity",
+      "entity_invalid_device_class": "Entity must have device class 'energy'",
+      "entity_missing_state_class": "Entity must expose a state class",
+      "entity_invalid_state_class": "Entity state class is not supported",
+      "entity_invalid_unit": "Entity must report energy in kWh/Wh",
+      "entity_state_unavailable": "Entity state is currently unavailable",
+      "entity_state_non_numeric": "Entity state must be a numeric value",
       "api_key_required_for_tou": "API key is required when ToU is enabled",
-      "invalid_api_key": "Invalid API key or unable to connect to Calendarific API"
+      "invalid_api_key": "Calendarific API key is invalid",
+      "api_key_rate_limited": "Calendarific API usage limit reached, try again later",
+      "api_key_http_error": "Calendarific API returned an unexpected response",
+      "api_key_server_error": "Calendarific API is temporarily unavailable",
+      "api_key_timeout": "Timed out while contacting Calendarific API",
+      "api_key_cannot_connect": "Cannot connect to Calendarific API",
+      "api_key_unknown_error": "Unexpected error occurred while validating API key"
     },
     "abort": {
       "already_configured": "Device is already configured"
