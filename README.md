@@ -7,14 +7,15 @@
 
 A Home Assistant integration to calculate your TNB (by Cikgu Saleh) electricity costs in Malaysia. Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billing calculations.
 
-## ⭐ What's New in v3.4.0
+## ⭐ What's New in v3.4.1
 
 - **📅 Daily Usage Tracking**: Monitor today's consumption and costs in real-time
 - **🤖 Automation Helpers**: Binary sensors for peak period, high usage alerts, holidays
 - **📊 11 New Sensors**: Today's import/export, costs, tier status, and more
-- **🔮 Smart Predictions**: Hybrid cost forecasting with historical learning (from v3.3.0)
+- **🔮 Smart Predictions**: Hybrid cost forecasting with historical learning
 - **🎯 TNB Compliance**: Exact 15-holiday schedule matching TNB tariff
 - **✅ Verified Accuracy**: All calculations match TNB templates exactly
+- **🔧 HACS Compatible**: Fixed manifest validation for seamless installation
 
 ## Features
 
