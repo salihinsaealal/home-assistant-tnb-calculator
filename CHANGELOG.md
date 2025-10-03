@@ -2,6 +2,12 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [3.5.1] - 2025-10-03
+
+### Fixed
+- **Diagnostic Sensors**: Resolved Home Assistant entity registry error caused by using string `entity_category` values. Diagnostic sensors are now registered using `EntityCategory.DIAGNOSTIC` and appear correctly after reload.
+- **Version Metadata**: Bumped integration and device `sw_version` to 3.5.1 for accurate reporting.
+
 ## [3.5.0] - 2025-10-03
 
 ### Added
