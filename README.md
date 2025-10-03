@@ -17,15 +17,15 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v3.4.2
+## ⭐ What's New in v3.5.0
 
+- **🔍 Diagnostic Tools**: Health monitoring and troubleshooting sensors
+- **🧾 Bill Comparison Service**: Verify accuracy against actual TNB bill
 - **📅 Daily Usage Tracking**: Monitor today's consumption and costs in real-time
 - **🤖 Automation Helpers**: Binary sensors for peak period, high usage alerts, holidays
-- **📊 11 New Sensors**: Today's import/export, costs, tier status, and more
 - **🔮 Smart Predictions**: Hybrid cost forecasting with historical learning
 - **🎯 TNB Compliance**: Exact 15-holiday schedule matching TNB tariff
 - **✅ Verified Accuracy**: All calculations match TNB templates exactly
-- **🔧 HACS Compatible**: Fixed manifest validation for seamless installation
 
 ## Features
 

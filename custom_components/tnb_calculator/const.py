@@ -209,6 +209,35 @@ BASE_SENSOR_TYPES = {
         "state_class": None,
         "entity_category": None,  # Main entity
     },
+    # Diagnostic sensors (health & monitoring)
+    "storage_health": {
+        "name": "Storage Health",
+        "unit": None,
+        "device_class": None,
+        "state_class": None,
+        "entity_category": "diagnostic",
+    },
+    "cached_holidays_count": {
+        "name": "Cached Holidays",
+        "unit": "holidays",
+        "device_class": None,
+        "state_class": "measurement",
+        "entity_category": "diagnostic",
+    },
+    "last_update": {
+        "name": "Last Update",
+        "unit": None,
+        "device_class": "timestamp",
+        "state_class": None,
+        "entity_category": "diagnostic",
+    },
+    "integration_uptime": {
+        "name": "Integration Uptime",
+        "unit": "hours",
+        "device_class": "duration",
+        "state_class": "measurement",
+        "entity_category": "diagnostic",
+    },
     # Secondary cost breakdown
     "peak_cost": {
         "name": "Peak Cost",

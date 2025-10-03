@@ -1,0 +1,38 @@
+compare_with_bill:
+  name: Compare with Actual Bill
+  description: Compare calculated costs with your actual TNB bill to verify accuracy
+  fields:
+    actual_bill:
+      name: Actual Bill Amount
+      description: Your actual TNB bill amount in RM
+      required: true
+      example: 156.50
+      selector:
+        number:
+          min: 0
+          max: 10000
+          step: 0.01
+          mode: box
+          unit_of_measurement: "RM"
+    month:
+      name: Month
+      description: Month of the bill (1-12). Leave empty for current month.
+      required: false
+      example: 10
+      selector:
+        number:
+          min: 1
+          max: 12
+          step: 1
+          mode: box
+    year:
+      name: Year
+      description: Year of the bill. Leave empty for current year.
+      required: false
+      example: 2025
+      selector:
+        number:
+          min: 2020
+          max: 2030
+          step: 1
+          mode: box

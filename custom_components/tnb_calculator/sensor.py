@@ -83,7 +83,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.4.2",
+        sw_version="3.5.0",
     )
 
     sensors = [
@@ -147,6 +147,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         self._last_calculated_cost = 0.0
         self._daily_data: Dict[str, Any] = {}
         self._daily_data_loaded = False
+        self._integration_start_time = dt_util.now()
+        self._last_successful_update = None
 
     async def _load_monthly_data(self) -> None:
         """Load monthly data from storage."""
@@ -421,6 +423,19 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             else:
                 tier_status = "Above 1500 kWh"
             result["tier_status"] = tier_status
+            
+            # Diagnostic sensors
+            result["storage_health"] = self._check_storage_health()
+            result["cached_holidays_count"] = len(self._holiday_cache)
+            result["last_update"] = now.isoformat()
+            
+            # Calculate uptime in hours
+            uptime_delta = now - self._integration_start_time
+            uptime_hours = uptime_delta.total_seconds() / 3600
+            result["integration_uptime"] = round(uptime_hours, 2)
+            
+            # Mark successful update
+            self._last_successful_update = now
 
             return result
 
@@ -633,6 +648,26 @@ class TNBDataCoordinator(DataUpdateCoordinator):
     def _round_energy(self, value: float) -> float:
         """Round energy to 3 decimal places."""
         return round(value, 3)
+
+    def _check_storage_health(self) -> str:
+        """Check storage health status."""
+        try:
+            # Check if monthly data exists and has required fields
+            if not hasattr(self, "_monthly_data") or not self._monthly_data:
+                return "Missing"
+            
+            required_fields = ["month", "year", "import_total", "export_total"]
+            for field in required_fields:
+                if field not in self._monthly_data:
+                    return "Corrupted"
+            
+            # Check if data is reasonable
+            if self._monthly_data.get("import_total", 0) < 0:
+                return "Corrupted"
+            
+            return "OK"
+        except Exception:
+            return "Error"
 
     async def _fetch_holidays_if_needed(self, timestamp: datetime) -> None:
         """Fetch holidays from API daily and cache them."""
@@ -1011,7 +1046,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "3.4.2",
+            "sw_version": "3.5.0",
         }
 
     @property

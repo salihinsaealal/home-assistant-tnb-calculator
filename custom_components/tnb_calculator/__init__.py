@@ -4,15 +4,25 @@ import logging
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.const import Platform
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
+import voluptuous as vol
 
 from .const import DOMAIN
 from .sensor import TNBDataCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["sensor"]
+PLATFORMS: list[Platform] = [Platform.SENSOR]
+
+# Service schema
+SERVICE_COMPARE_BILL_SCHEMA = vol.Schema({
+    vol.Required("actual_bill"): cv.positive_float,
+    vol.Optional("month"): vol.All(vol.Coerce(int), vol.Range(min=1, max=12)),
+    vol.Optional("year"): vol.All(vol.Coerce(int), vol.Range(min=2020, max=2030)),
+})
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -43,6 +53,65 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Set up platforms
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        
+        # Register services
+        async def handle_compare_bill(call: ServiceCall) -> None:
+            """Handle the compare_with_bill service call."""
+            actual_bill = call.data["actual_bill"]
+            month = call.data.get("month")
+            year = call.data.get("year")
+            
+            # Find the coordinator for this entry
+            coordinator_data = hass.data[DOMAIN].get(entry.entry_id)
+            if not coordinator_data or "coordinator" not in coordinator_data:
+                _LOGGER.error("Could not find TNB Calculator coordinator for bill comparison")
+                return
+            
+            coordinator = coordinator_data["coordinator"]
+            
+            # Get calculated cost
+            calculated_cost = coordinator.data.get("total_cost_tou", 0.0)
+            if calculated_cost == 0.0:
+                calculated_cost = coordinator.data.get("total_cost_non_tou", 0.0)
+            
+            # Calculate difference
+            difference = calculated_cost - actual_bill
+            percentage_diff = (difference / actual_bill * 100) if actual_bill > 0 else 0
+            
+            # Log the comparison
+            _LOGGER.info(
+                "Bill Comparison - Actual: RM %.2f, Calculated: RM %.2f, Difference: RM %.2f (%.1f%%)",
+                actual_bill, calculated_cost, difference, percentage_diff
+            )
+            
+            # Create persistent notification
+            await hass.services.async_call(
+                "persistent_notification",
+                "create",
+                {
+                    "title": "TNB Bill Comparison",
+                    "message": f"""**Bill Comparison Results**
+
+Actual Bill: RM {actual_bill:.2f}
+Calculated: RM {calculated_cost:.2f}
+Difference: RM {difference:.2f} ({percentage_diff:+.1f}%)
+
+{"✅ Calculation is accurate!" if abs(percentage_diff) < 5 else "⚠️ Significant difference detected"}
+
+Monthly Import: {coordinator.data.get('import_energy', 0):.2f} kWh
+Monthly Export: {coordinator.data.get('export_energy', 0):.2f} kWh
+""",
+                    "notification_id": "tnb_bill_comparison",
+                },
+            )
+        
+        # Register the service
+        hass.services.async_register(
+            DOMAIN,
+            "compare_with_bill",
+            handle_compare_bill,
+            schema=SERVICE_COMPARE_BILL_SCHEMA,
+        )
 
         return True
 
