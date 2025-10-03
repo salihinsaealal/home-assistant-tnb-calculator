@@ -18,10 +18,9 @@ views:
             name: Forecast
             icon: mdi:chart-line-variant
           - type: divider
-          - entity: sensor.tnb_calculator_tier_status
+          - entity: sensor.tnb_calculator_usage_tier
             name: Current Tier
             icon: mdi:stairs
-
       - type: entities
         title: ⚡ Energy Usage
         show_header_toggle: false
@@ -36,13 +35,12 @@ views:
             name: Net Energy
             icon: mdi:swap-horizontal
           - type: divider
-          - entity: sensor.tnb_calculator_today_import_kwh
+          - entity: sensor.tnb_calculator_today_import
             name: Today Import
             icon: mdi:calendar-today
-          - entity: sensor.tnb_calculator_today_export_kwh
+          - entity: sensor.tnb_calculator_today_export
             name: Today Export
             icon: mdi:solar-power
-
       - type: entities
         title: 📅 Period & Status
         show_header_toggle: false
@@ -59,7 +57,6 @@ views:
           - entity: sensor.tnb_calculator_high_usage_alert
             name: High Usage Alert
             icon: mdi:alert-circle
-
       - type: custom:apexcharts-card
         header:
           show: true
@@ -103,7 +100,6 @@ views:
             color: '#9C27B0'
             stroke_width: 2
             curve: stepline
-
       - type: custom:apexcharts-card
         header:
           show: true
@@ -151,12 +147,11 @@ views:
               duration: 1d
             yaxis_id: energy
             color: '#4CAF50'
-
       - type: entities
         title: 🛠️ Diagnostics
         show_header_toggle: false
         entities:
-          - entity: sensor.tnb_calculator_cached_holidays_count
+          - entity: sensor.tnb_calculator_cached_holidays
             name: Cached Holidays
             icon: mdi:calendar-star
           - entity: sensor.tnb_calculator_validation_status
