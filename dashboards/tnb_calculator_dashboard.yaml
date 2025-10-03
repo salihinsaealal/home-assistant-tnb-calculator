@@ -1,0 +1,170 @@
+views:
+  - title: TNB Calculator
+    path: tnb-calculator
+    icon: mdi:lightning-bolt-circle
+    badges: []
+    cards:
+      - type: entities
+        title: 💰 Monthly Costs
+        show_header_toggle: false
+        entities:
+          - entity: sensor.tnb_calculator_total_cost_tou
+            name: ToU Cost
+            icon: mdi:lightning-bolt
+          - entity: sensor.tnb_calculator_total_cost_non_tou
+            name: Flat Cost
+            icon: mdi:cash-multiple
+          - entity: sensor.tnb_calculator_predicted_monthly_cost
+            name: Forecast
+            icon: mdi:chart-line-variant
+          - type: divider
+          - entity: sensor.tnb_calculator_tier_status
+            name: Current Tier
+            icon: mdi:stairs
+
+      - type: entities
+        title: ⚡ Energy Usage
+        show_header_toggle: false
+        entities:
+          - entity: sensor.tnb_calculator_import_energy
+            name: Monthly Import
+            icon: mdi:transmission-tower-import
+          - entity: sensor.tnb_calculator_export_energy
+            name: Monthly Export
+            icon: mdi:transmission-tower-export
+          - entity: sensor.tnb_calculator_net_energy
+            name: Net Energy
+            icon: mdi:swap-horizontal
+          - type: divider
+          - entity: sensor.tnb_calculator_today_import_kwh
+            name: Today Import
+            icon: mdi:calendar-today
+          - entity: sensor.tnb_calculator_today_export_kwh
+            name: Today Export
+            icon: mdi:solar-power
+
+      - type: entities
+        title: 📅 Period & Status
+        show_header_toggle: false
+        entities:
+          - entity: sensor.tnb_calculator_period_status
+            name: Current Period
+            icon: mdi:clock-outline
+          - entity: sensor.tnb_calculator_day_status
+            name: Day Type
+            icon: mdi:calendar-week
+          - entity: sensor.tnb_calculator_holiday_today
+            name: Holiday Today
+            icon: mdi:party-popper
+          - entity: sensor.tnb_calculator_high_usage_alert
+            name: High Usage Alert
+            icon: mdi:alert-circle
+
+      - type: custom:apexcharts-card
+        header:
+          show: true
+          title: 📊 Monthly Cost Comparison (ToU vs Flat)
+          show_states: true
+        graph_span: 30d
+        apex_config:
+          chart:
+            height: 300
+            background: transparent
+          theme:
+            mode: dark
+          stroke:
+            width: 3
+            curve: smooth
+          fill:
+            type: gradient
+            gradient:
+              shadeIntensity: 0.4
+              opacityFrom: 0.6
+              opacityTo: 0.1
+          legend:
+            show: true
+            position: top
+          grid:
+            borderColor: '#444'
+        series:
+          - entity: sensor.tnb_calculator_total_cost_tou
+            name: ToU Cost
+            type: area
+            color: '#FF9800'
+            stroke_width: 3
+          - entity: sensor.tnb_calculator_total_cost_non_tou
+            name: Flat Cost
+            type: area
+            color: '#4CAF50'
+            stroke_width: 3
+          - entity: sensor.tnb_calculator_predicted_monthly_cost
+            name: Forecast
+            type: line
+            color: '#9C27B0'
+            stroke_width: 2
+            curve: stepline
+
+      - type: custom:apexcharts-card
+        header:
+          show: true
+          title: ⚡ Daily Energy Flow (Import vs Export)
+          show_states: true
+        graph_span: 7d
+        span:
+          end: day
+        yaxis:
+          - id: energy
+            decimals: 1
+            apex_config:
+              title:
+                text: kWh
+        apex_config:
+          chart:
+            height: 300
+            background: transparent
+          theme:
+            mode: dark
+          plotOptions:
+            bar:
+              columnWidth: 70%
+          stroke:
+            width: 2
+          legend:
+            show: true
+            position: top
+          grid:
+            borderColor: '#444'
+        series:
+          - entity: sensor.tnb_calculator_import_energy
+            name: Import
+            type: column
+            group_by:
+              func: diff
+              duration: 1d
+            yaxis_id: energy
+            color: '#F44336'
+          - entity: sensor.tnb_calculator_export_energy
+            name: Export
+            type: column
+            group_by:
+              func: diff
+              duration: 1d
+            yaxis_id: energy
+            color: '#4CAF50'
+
+      - type: entities
+        title: 🛠️ Diagnostics
+        show_header_toggle: false
+        entities:
+          - entity: sensor.tnb_calculator_cached_holidays_count
+            name: Cached Holidays
+            icon: mdi:calendar-star
+          - entity: sensor.tnb_calculator_validation_status
+            name: Validation Status
+            icon: mdi:shield-check
+          - entity: sensor.tnb_calculator_storage_health
+            name: Storage Health
+            icon: mdi:database-check
+          - entity: sensor.tnb_calculator_integration_uptime
+            name: Integration Uptime
+            icon: mdi:clock-check

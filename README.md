@@ -17,11 +17,11 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v3.6.2
+## ⭐ What's New in v3.7.0
 
-- **🧼 Reset Service**: Call `tnb_calculator.reset_storage` (type `RESET` to confirm) to clear cached totals, historical months, and holiday data.
-- **📅 Holiday Diagnostics**: `sensor.tnb_cached_holidays_count` lists every cached holiday and the last fetch timestamp as sensor attributes for cross-checking.
-- **✅ Configuration Guardrails**: Setup validates energy sensors and Calendarific API keys with detailed error messages.
+- **🧼 Reset Service**: Clear cached totals, historical months, and holiday data via `tnb_calculator.reset_storage` (requires typing `RESET`).
+- **📊 Bubble Dashboard**: Ready-made `dashboards/tnb_calculator_dashboard.yaml` featuring Bubble Card and ApexCharts for monthly snapshots, daily usage, and quick actions.
+- **📅 Holiday Diagnostics**: `sensor.tnb_cached_holidays_count` surfaces the full holiday list and last fetch timestamp for cross-checking.
 - **📅 Daily Usage Tracking**: Monitor today's import/export and costs (from v3.4).
 - **🤖 Automation Helpers**: Binary sensors for peak period, high usage alerts, and holiday detection (from v3.4).
 - **🔮 Smart Predictions**: Hybrid forecast using current trend and historical averages (from v3.3).
@@ -163,6 +163,24 @@ entities:
   - entity: sensor.tnb_calculator_import_energy
   - entity: sensor.tnb_calculator_net_energy
 ```
+
+## Pre-built Dashboard (Bubble Card + ApexCharts)
+- **Location:** `dashboards/tnb_calculator_dashboard.yaml`
+- **Dependencies:**
+  - [Bubble Card](https://github.com/Clooos/Bubble-Card)
+  - [ApexCharts Card](https://github.com/RomRider/apexcharts-card)
+
+### Use as a dedicated dashboard
+1. Make sure both custom cards are installed and added under *Settings → Dashboards → Resources*.
+2. Copy `dashboards/tnb_calculator_dashboard.yaml` into your `config/www/` (or include it via your dashboard YAML).
+3. In Home Assistant, create a new dashboard and paste the contents of the file. It renders monthly summaries, daily usage, diagnostics, and service buttons.
+
+### Add as an extra view to an existing dashboard
+1. Open your dashboard YAML.
+2. Append the `views:` block from `dashboards/tnb_calculator_dashboard.yaml` (or merge its single view with your layout).
+3. Update entity IDs if you renamed any sensors.
+
+The layout uses Bubble Card for quick metrics and ApexCharts for energy/cost trends. Buttons at the bottom call `tnb_calculator.compare_with_bill` and `tnb_calculator.reset_storage`.
 
 ### Automations
 Create automations based on your electricity usage:

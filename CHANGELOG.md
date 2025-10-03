@@ -2,6 +2,14 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [3.7.0] - 2025-10-03
+
+### Added
+- **Bubble Dashboard Template**: New `dashboards/tnb_calculator_dashboard.yaml` featuring Bubble Card quick metrics and ApexCharts graphs.
+
+### Improved
+- **Documentation**: README and info cards now explain how to import the dashboard as a dedicated view or merge it into existing dashboards.
+
 ## [3.6.2] - 2025-10-03
 
 ### Added
