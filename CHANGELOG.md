@@ -2,6 +2,11 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [3.6.1] - 2025-10-03
+
+### Added
+- **Holiday Diagnostics**: `sensor.tnb_cached_holidays_count` now exposes `cached_holidays` and `cached_holidays_last_fetch` attributes listing every cached date for quick cross-checking.
+
 ## [3.6.0] - 2025-10-03
 
 ### Added
