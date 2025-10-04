@@ -1,5 +1,6 @@
 {
   "name": "TNB Calculator",
+  "content_in_root": false,
   "country": ["MY"],
   "homeassistant": "2024.1.0",
   "render_readme": true
