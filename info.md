@@ -20,11 +20,11 @@ A Home Assistant integration to calculate your TNB (Tenaga Nasional Berhad) elec
 - **Smart Meter Reset Handling**: Automatically detects and handles daily/monthly meter resets
 - **Verified Accuracy**: Calculations match TNB tariff templates exactly for both ToU and non-ToU
 
-## What's New in v3.7.1
+## What's New in v3.7.2
 
 - **🧼 Reset Service**: `tnb_calculator.reset_storage` clears cached totals, historical months, and cached holidays once you type `RESET`.
 - **📊 Bubble Dashboard Template**: Pre-built Bubble Card + ApexCharts dashboard available at `dashboards/tnb_calculator_dashboard.yaml`.
-- **🔧 Reliability Fix**: Restored `CONF_YEAR` constant to ensure the integration loads correctly.
+- **🛠️ HACS Packaging**: Updated metadata (`hacs.json`, version bump) to streamline inclusion in the default store.
 
 ### Dashboard Usage
 1. Install Bubble Card and ApexCharts Card (through HACS or manual resources) and add them under *Settings → Dashboards → Resources*.

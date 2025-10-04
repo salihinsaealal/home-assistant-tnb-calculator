@@ -2,6 +2,11 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [3.7.2] - 2025-10-04
+
+### Fixed
+- Updated `hacs.json` metadata and version strings to align with HACS default-store requirements.
+
 ## [3.7.1] - 2025-10-03
 
 ### Fixed

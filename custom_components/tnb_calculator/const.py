@@ -20,7 +20,7 @@ CONF_EXPORT_ENTITY = "export_entity"
 CONF_CALENDARIFIC_API_KEY = "calendarific_api_key"
 CONF_COUNTRY = "country"
 CONF_YEAR = "year"
-CONF_VERSION = "3.7.1"
+CONF_VERSION = "3.7.2"
 
 # Base sensor types (always exposed) - ordered by priority
 BASE_SENSOR_TYPES = {

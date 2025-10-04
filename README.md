@@ -17,11 +17,11 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v3.7.1
+## ⭐ What's New in v3.7.2
 
 - **🧼 Reset Service**: Clear cached totals, historical months, and holiday data via `tnb_calculator.reset_storage` (requires typing `RESET`).
 - **📊 Bubble Dashboard**: Ready-made `dashboards/tnb_calculator_dashboard.yaml` featuring Bubble Card and ApexCharts for monthly snapshots, daily usage, and quick actions.
-- **🔧 Reliability Fix**: Restored `CONF_YEAR` constant to prevent import errors when loading the integration.
+- **🛠️ HACS Packaging**: Updated metadata (version 3.7.2, `hacs.json`) for smooth default-store submission.
 - **📅 Daily Usage Tracking**: Monitor today's import/export and costs (from v3.4).
 - **🤖 Automation Helpers**: Binary sensors for peak period, high usage alerts, and holiday detection (from v3.4).
 - **🔮 Smart Predictions**: Hybrid forecast using current trend and historical averages (from v3.3).
