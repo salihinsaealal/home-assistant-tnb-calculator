@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="energyMonitoringicon.png" alt="TNB Calculator" width="200"/>
+<img src="icon.png" alt="TNB Calculator" width="200"/>
 
 # TNB Calculator for Home Assistant
 

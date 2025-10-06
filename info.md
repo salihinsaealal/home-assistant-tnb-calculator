@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/salihinsaealal/home-assistant-tnb-calculator/master/energyMonitoringicon.png" alt="TNB Calculator" width="120"/>
+<img src="https://raw.githubusercontent.com/salihinsaealal/home-assistant-tnb-calculator/master/icon.png" alt="TNB Calculator" width="120"/>
 
 # TNB Calculator
 
