@@ -25,6 +25,8 @@ A Home Assistant integration to calculate your TNB (Tenaga Nasional Berhad) elec
 ## What's New in v3.7.3b0 (Beta)
 
 - **⚙️ Optional Inputs Fixed**: Config flow now accepts blank export sensors and Calendarific API keys without blocking setup.
+- **📊 Improved Predictions**: Direct cost averaging for accurate forecasts. Example: RM 3.00 over 4 days = RM 0.75/day × 30 = RM 22.50 ± 5%.
+- **🔍 New Diagnostic Sensors**: `Prediction Method` and `Configuration Scenario` for better visibility.
 - **🧼 Reset & Dashboard (Carry-over)**: Reset service refinements and Bubble dashboard template remain included.
 - **✅ Beta Tag**: Marked as beta for community testing before stable release.
 
@@ -58,21 +60,27 @@ A Home Assistant integration to calculate your TNB (Tenaga Nasional Berhad) elec
 
 After setup, these sensors will be created:
 
-- **Total Cost**: Your monthly TNB bill in RM
-- **Peak Cost**: Peak period charges (ToU only)
-- **Off Peak Cost**: Off-peak period charges (ToU only)
-- **Import Energy**: Monthly electricity imported in kWh
-- **Import Peak Energy**: Monthly peak-period import in kWh (ToU only)
-- **Import Off Peak Energy**: Monthly off-peak import in kWh (ToU only)
-- **Export Energy**: Monthly electricity exported in kWh
-- **Net Energy**: Net consumption (Import - Export) in kWh
+### Main Sensors
+- **Total Cost (ToU/Non-ToU)**: Your monthly TNB bill
+- **Import/Export Energy**: Monthly electricity flow in kWh
+- **Net Energy**: Net consumption (Import - Export)
+- **Predicted Monthly Cost**: Smart forecast with ±5% tolerance
+- **Today Import/Export/Cost**: Real-time daily tracking
 
-### Detailed Cost Sensors (ToU only):
-- Generation Charge Peak/Off Peak
-- AFA Charge, Capacity Charge, Network Charge
-- Retailing Charge, ICT Adjustment, Service Tax
-- KWTBB Charge, NEM Rebates, Insentif Rebate
-- Rate Sensors for all components
+### Status & Automation
+- **Period Status**: Peak/Off-Peak indicator
+- **Usage Tier**: Billing tier (Below 600 kWh, 600-1500 kWh, Above 1500 kWh)
+- **Peak Period/Holiday Today**: Binary sensors for automations
+
+### Diagnostic Sensors
+- **Prediction Method**: Shows Cost Trend or Hybrid algorithm
+- **Configuration Scenario**: Your setup type (e.g., "Import + Export (ToU)")
+- **Storage Health**: Data persistence status
+- **Validation Status**: Configuration health check
+
+### Detailed Cost Breakdown (ToU only)
+- Generation Charge Peak/Off Peak, Capacity, Network, Service Tax
+- KWTBB Charge, NEM Rebates, Rate Sensors
 
 ## Support
 

@@ -21,6 +21,10 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 ## ⭐ What's New in v3.7.3b0 (Beta)
 
 - **⚙️ Optional Inputs Fixed**: Config flow now accepts blank export sensors and Calendarific API keys without blocking setup.
+- **📊 Improved Predictions**: Switched to direct cost averaging for more accurate monthly forecasts. No more inflated predictions on early days.
+- **🔍 New Diagnostic Sensors**: 
+  - `Prediction Method` - Shows which prediction algorithm is active (Cost Trend or Hybrid)
+  - `Configuration Scenario` - Displays your setup type (Import Only, Import+Export, ToU, Non-ToU)
 - **🧼 Reset & Dashboard (Carry-over)**: Reset service refinements and Bubble dashboard template remain included.
 - **✅ Beta Tag**: Marked as beta for broader testing before stable release.
 
@@ -97,14 +101,40 @@ data:
 
 After setup, these sensors will be created:
 
-- **Total Cost**: Your monthly TNB bill in RM
-- **Peak Cost**: Peak period charges (ToU only)
-- **Off Peak Cost**: Off-peak period charges (ToU only)
+### Main Sensors
+- **Total Cost (ToU)**: Your monthly TNB bill with Time of Use rates
+- **Total Cost (Non-ToU)**: Your monthly bill with flat tariff
 - **Import Energy**: Monthly electricity imported in kWh
-- **Import Peak Energy**: Monthly peak-period import in kWh (ToU only)
-- **Import Off Peak Energy**: Monthly off-peak import in kWh (ToU only) 
 - **Export Energy**: Monthly electricity exported in kWh
 - **Net Energy**: Net consumption (Import - Export) in kWh
+- **Predicted Monthly Cost**: Smart forecast of end-of-month bill
+- **Predicted Monthly Import**: Projected total kWh consumption
+
+### Time of Use Sensors (when API key provided)
+- **Import Peak Energy**: Monthly peak-period import (2PM-10PM weekdays)
+- **Import Off Peak Energy**: Monthly off-peak import (nights, weekends, holidays)
+- **Peak Cost**: Peak period charges
+- **Off Peak Cost**: Off-peak period charges
+
+### Daily Tracking
+- **Today Import/Export**: Real-time daily consumption
+- **Today Cost (ToU/Non-ToU)**: Today's accumulated charges
+
+### Status & Automation Helpers
+- **Period Status**: Current time period (Peak/Off-Peak)
+- **Day Status**: Weekday/Weekend/Holiday
+- **Usage Tier**: Current billing tier (Below 600 kWh, 600-1500 kWh, Above 1500 kWh)
+- **Peak Period**: Binary sensor for automations (on during peak hours)
+- **High Usage Alert**: Binary sensor (on when approaching 600 kWh tier)
+- **Holiday Today**: Binary sensor (on during public holidays)
+
+### Diagnostic Sensors
+- **Prediction Method**: Shows active prediction algorithm (Cost Trend or Hybrid)
+- **Configuration Scenario**: Your setup type (e.g., "Import + Export (ToU)")
+- **Storage Health**: Data persistence status
+- **Validation Status**: Configuration health check
+- **Cached Holidays**: Number of holidays stored
+- **Integration Uptime**: Hours since integration started
 
 ### Detailed Cost Sensors (ToU only):
 - **Generation Charge Peak/Off Peak**: Energy generation costs
@@ -133,6 +163,16 @@ After setup, these sensors will be created:
 - Handles tiered pricing (first 600 kWh vs excess)
 - Calculates export credits for solar users
 - ToU mode automatically splits import energy and applies appropriate rates and NEM rebates
+
+### Smart Predictions
+- **Cost Trend Method**: Direct cost averaging - `(current_cost / days_elapsed) × days_in_month`
+  - Example: RM 3.00 over 4 days = RM 0.75/day × 30 = RM 22.50 ± 5%
+  - More accurate than kWh projection, especially early in the month
+- **Hybrid Method**: Weighted combination of cost trend + historical average (when 2+ months of data available)
+  - Early month (days 1-7): 30% trend, 70% history
+  - Mid month (days 8-20): 60% trend, 40% history
+  - Late month (days 21+): 80% trend, 20% history
+- **Confidence Levels**: High (3+ months), Medium (1-2 months), Low (no history)
 
 ### Holiday Detection (ToU only)
 - Uses Calendarific API to check Malaysian holidays

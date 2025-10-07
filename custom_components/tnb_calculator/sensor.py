@@ -450,6 +450,11 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 tier_status = "Above 1500 kWh"
             result["tier_status"] = tier_status
             
+            # Configuration scenario sensor
+            scenario_data = self._determine_configuration_scenario()
+            result["configuration_scenario"] = scenario_data["state"]
+            result["configuration_scenario_details"] = scenario_data["attributes"]
+            
             # Diagnostic sensors
             result["storage_health"] = self._check_storage_health()
             result["cached_holidays_count"] = len(self._holiday_cache)
@@ -484,6 +489,40 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         if full_message not in self._validation_errors:
             self._validation_errors.append(full_message)
             _LOGGER.warning("Validation warning - %s", full_message)
+    
+    def _determine_configuration_scenario(self) -> Dict[str, Any]:
+        """Determine current configuration scenario and return state with attributes."""
+        has_import = bool(self._import_entity)
+        has_export = bool(self._export_entity)
+        has_api = bool(self._api_key)
+        tou_enabled = self._tou_enabled
+        
+        # Determine state
+        if has_export and tou_enabled:
+            state = "Import + Export (ToU)"
+            description = "Full configuration with import, export tracking, and Time of Use calculations. Peak/off-peak splitting active with holiday detection."
+        elif has_export and not tou_enabled:
+            state = "Import + Export (Non-ToU)"
+            description = "Import and export tracking without Time of Use. Costs calculated using flat tariff. No peak/off-peak splitting."
+        elif not has_export and tou_enabled:
+            state = "Import Only (ToU)"
+            description = "Import-only configuration with Time of Use. Peak/off-peak splitting active with holiday detection. Export energy not tracked."
+        else:
+            state = "Import Only (Non-ToU)"
+            description = "Import-only configuration without Time of Use. Costs calculated using flat tariff. Export energy not tracked."
+        
+        # Build attributes
+        attributes = {
+            "has_import": has_import,
+            "has_export": has_export,
+            "has_api_key": has_api,
+            "tou_enabled": tou_enabled,
+            "cost_calculation_mode": "ToU" if tou_enabled else "Non-ToU",
+            "export_tracking": "Enabled" if has_export else "Disabled",
+            "description": description,
+        }
+        
+        return {"state": state, "attributes": attributes}
 
     def _get_entity_state(self, entity_id: Optional[str], source: str) -> float:
         """Get numeric state from entity, return 0.0 if unavailable."""
@@ -981,28 +1020,21 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         predictions["daily_average_kwh"] = self._round_energy(daily_avg_kwh)
         predictions["daily_average_cost"] = self._round_currency(daily_avg_cost)
         
-        # METHOD 2: Current trend prediction (tiered rate aware)
+        # METHOD 2: Direct cost-based prediction (simplified and more accurate)
+        # Instead of projecting kWh then recalculating cost, directly average the cost
+        base_prediction = daily_avg_cost * days_in_month
+        tolerance_percent = 0.05  # 5% dynamic tolerance
+        tolerance = base_prediction * tolerance_percent
+        
+        trend_prediction = base_prediction
+        predictions["predicted_from_trend"] = self._round_currency(trend_prediction)
+        predictions["prediction_tolerance"] = self._round_currency(tolerance)
+        predictions["prediction_range_min"] = self._round_currency(base_prediction - tolerance)
+        predictions["prediction_range_max"] = self._round_currency(base_prediction + tolerance)
+        
+        # Still project kWh for reference (informational only)
         projected_import = (monthly_import / days_elapsed) * days_in_month
         predictions["predicted_monthly_kwh"] = self._round_energy(projected_import)
-        
-        if self._tou_enabled:
-            # Maintain peak/offpeak ratio
-            if monthly_import > 0:
-                peak_ratio = monthly_peak / monthly_import
-            else:
-                peak_ratio = 0.6  # Default 60% peak
-            
-            proj_peak = projected_import * peak_ratio
-            proj_offpeak = projected_import * (1 - peak_ratio)
-            proj_export = monthly_export  # Assume export stays constant
-            
-            trend_costs = self._calculate_tou_costs(proj_peak, proj_offpeak, proj_export)
-            trend_prediction = trend_costs["total_cost"]
-        else:
-            trend_costs = self._calculate_non_tou_costs(projected_import, monthly_export)
-            trend_prediction = trend_costs["total_cost"]
-        
-        predictions["predicted_from_trend"] = self._round_currency(trend_prediction)
         
         # METHOD 3: Historical average prediction (if available)
         historical_prediction = None
@@ -1059,10 +1091,30 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 predictions["prediction_confidence"] = "Medium"
             else:
                 predictions["prediction_confidence"] = "Low"
+            
+            # Populate prediction method sensor
+            predictions["prediction_method"] = "Hybrid (Cost + History)"
+            predictions["prediction_method_details"] = {
+                "method": "hybrid",
+                "trend_weight": int(weight_trend * 100),
+                "history_weight": int(weight_history * 100),
+                "historical_months": months_count,
+                "description": f"Using hybrid prediction: {int(weight_trend * 100)}% cost trend (RM {trend_prediction:.2f}) + {int(weight_history * 100)}% historical average (RM {historical_prediction:.2f}) = RM {hybrid_prediction:.2f}"
+            }
         else:
             # No history: use Method 2 only
             predictions["predicted_monthly_cost"] = self._round_currency(trend_prediction)
             predictions["prediction_confidence"] = "Low" if days_elapsed < 7 else "Medium"
+            
+            # Populate prediction method sensor
+            predictions["prediction_method"] = "Cost Trend"
+            predictions["prediction_method_details"] = {
+                "method": "cost_trend",
+                "trend_weight": 100,
+                "history_weight": 0,
+                "historical_months": 0,
+                "description": f"Using direct cost averaging: RM {current_cost:.2f} over {days_elapsed} days = RM {daily_avg_cost:.2f}/day × {days_in_month} days = RM {trend_prediction:.2f} ± {tolerance:.2f}"
+            }
         
         return predictions
 
@@ -1119,6 +1171,26 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "cached_holidays": self.coordinator.data.get("cached_holidays"),
             "cached_holidays_last_fetch": self.coordinator.data.get("cached_holidays_last_fetch"),
         }
+        
+        # Add prediction method details as attributes
+        if self._sensor_type == "prediction_method":
+            method_details = self.coordinator.data.get("prediction_method_details", {})
+            attrs.update({
+                "method": method_details.get("method"),
+                "trend_weight": method_details.get("trend_weight"),
+                "history_weight": method_details.get("history_weight"),
+                "historical_months": method_details.get("historical_months"),
+                "days_elapsed": self.coordinator.data.get("days_remaining"),
+                "daily_average_cost": self.coordinator.data.get("daily_average_cost"),
+                "description": method_details.get("description"),
+            })
+            return attrs
+        
+        # Add configuration scenario details as attributes
+        if self._sensor_type == "configuration_scenario":
+            scenario_details = self.coordinator.data.get("configuration_scenario_details", {})
+            attrs.update(scenario_details)
+            return attrs
 
         for key in [
             "import_peak_energy",

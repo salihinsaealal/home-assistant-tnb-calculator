@@ -248,6 +248,20 @@ BASE_SENSOR_TYPES = {
         "state_class": None,
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
+    "prediction_method": {
+        "name": "Prediction Method",
+        "unit": None,
+        "device_class": None,
+        "state_class": None,
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    "configuration_scenario": {
+        "name": "Configuration Scenario",
+        "unit": None,
+        "device_class": None,
+        "state_class": None,
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
     # Secondary cost breakdown
     "peak_cost": {
         "name": "Peak Cost",
