@@ -124,3 +124,5 @@ examples.md
 HACS_CHECKLIST.md
 RELEASE_NOTES_*.md
 TNB ToU.xlsx
+dashboards/tnb_calculator_bubble_dashboard.yaml
+dashboards/tnb_calculator_bubble_modern.yaml

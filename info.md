@@ -4,6 +4,8 @@
 
 # TNB Calculator
 
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-donate-ff813f.svg)](https://buymeacoffee.com/salihin)
+
 **Calculate your TNB electricity costs in Malaysia**
 
 </div>
@@ -20,11 +22,11 @@ A Home Assistant integration to calculate your TNB (Tenaga Nasional Berhad) elec
 - **Smart Meter Reset Handling**: Automatically detects and handles daily/monthly meter resets
 - **Verified Accuracy**: Calculations match TNB tariff templates exactly for both ToU and non-ToU
 
-## What's New in v3.7.2
+## What's New in v3.7.3b (Beta)
 
-- **🧼 Reset Service**: `tnb_calculator.reset_storage` clears cached totals, historical months, and cached holidays once you type `RESET`.
-- **📊 Bubble Dashboard Template**: Pre-built Bubble Card + ApexCharts dashboard available at `dashboards/tnb_calculator_dashboard.yaml`.
-- **🛠️ HACS Packaging**: Updated metadata (`hacs.json`, version bump) to streamline inclusion in the default store.
+- **⚙️ Optional Inputs Fixed**: Config flow now accepts blank export sensors and Calendarific API keys without blocking setup.
+- **🧼 Reset & Dashboard (Carry-over)**: Reset service refinements and Bubble dashboard template remain included.
+- **✅ Beta Tag**: Marked as beta for community testing before stable release.
 
 ### Dashboard Usage
 1. Install Bubble Card and ApexCharts Card (through HACS or manual resources) and add them under *Settings → Dashboards → Resources*.

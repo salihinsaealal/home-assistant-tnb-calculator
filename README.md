@@ -7,6 +7,7 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/release/salihinsaealal/home-assistant-tnb-calculator.svg)](https://github.com/salihinsaealal/home-assistant-tnb-calculator/releases)
 [![License](https://img.shields.io/github/license/salihinsaealal/home-assistant-tnb-calculator.svg)](LICENSE)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-donate-ff813f.svg)](https://buymeacoffee.com/salihin)
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=salihinsaealal&repository=home-assistant-tnb-calculator&category=integration)
 
 **Calculate your TNB (Tenaga Nasional Berhad) electricity costs in Malaysia**
@@ -17,14 +18,11 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v3.7.2
+## ⭐ What's New in v3.7.3b (Beta)
 
-- **🧼 Reset Service**: Clear cached totals, historical months, and holiday data via `tnb_calculator.reset_storage` (requires typing `RESET`).
-- **📊 Bubble Dashboard**: Ready-made `dashboards/tnb_calculator_dashboard.yaml` featuring Bubble Card and ApexCharts for monthly snapshots, daily usage, and quick actions.
-- **🛠️ HACS Packaging**: Updated metadata (version 3.7.2, `hacs.json`) for smooth default-store submission.
-- **📅 Daily Usage Tracking**: Monitor today's import/export and costs (from v3.4).
-- **🤖 Automation Helpers**: Binary sensors for peak period, high usage alerts, and holiday detection (from v3.4).
-- **🔮 Smart Predictions**: Hybrid forecast using current trend and historical averages (from v3.3).
+- **⚙️ Optional Inputs Fixed**: Config flow now accepts blank export sensors and Calendarific API keys without blocking setup.
+- **🧼 Reset & Dashboard (Carry-over)**: Reset service refinements and Bubble dashboard template remain included.
+- **✅ Beta Tag**: Marked as beta for broader testing before stable release.
 
 
 ## Features

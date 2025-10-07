@@ -147,6 +147,7 @@ class TNBCalculatorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle the initial step."""
         errors = {}
+        defaults: Dict[str, Any] = {}
 
         if user_input is not None:
             # Validate import entity
@@ -172,41 +173,69 @@ class TNBCalculatorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors["base"] = api_error
 
             if not errors:
+                cleaned_input = {
+                    key: value
+                    for key, value in user_input.items()
+                    if value not in (None, "", [])
+                }
                 return self.async_create_entry(
                     title="TNB Calculator",
-                    data=user_input,
+                    data=cleaned_input,
                 )
 
-        data_schema = vol.Schema(
-            {
-                vol.Required(
-                    CONF_IMPORT_ENTITY,
-                    default=user_input.get(CONF_IMPORT_ENTITY) if user_input else None,
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(
-                        domain=["sensor", "utility_meter"],
-                        device_class=["energy"],
-                    )
-                ),
-                vol.Optional(
-                    CONF_EXPORT_ENTITY,
-                    default=user_input.get(CONF_EXPORT_ENTITY) if user_input else None,
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(
-                        domain=["sensor", "utility_meter"],
-                        device_class=["energy"],
-                    )
-                ),
+            # Prepare defaults for form re-rendering (preserve user selections only when meaningful)
+            for key in (CONF_IMPORT_ENTITY, CONF_EXPORT_ENTITY, CONF_CALENDARIFIC_API_KEY):
+                value = user_input.get(key)
+                if value is None:
+                    continue
+                if isinstance(value, str) and not value.strip():
+                    continue
+                defaults[key] = value
+
+        selector_import = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain=["sensor", "utility_meter"],
+                device_class=["energy"],
+            )
+        )
+        selector_export = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain=["sensor", "utility_meter"],
+                device_class=["energy"],
+            )
+        )
+        selector_api = selector.TextSelector(
+            selector.TextSelectorConfig(
+                type=selector.TextSelectorType.PASSWORD,
+            )
+        )
+
+        schema_dict: Dict[Any, Any] = {}
+        if CONF_IMPORT_ENTITY in defaults:
+            schema_dict[
+                vol.Required(CONF_IMPORT_ENTITY, default=defaults[CONF_IMPORT_ENTITY])
+            ] = selector_import
+        else:
+            schema_dict[vol.Required(CONF_IMPORT_ENTITY)] = selector_import
+
+        if CONF_EXPORT_ENTITY in defaults:
+            schema_dict[
+                vol.Optional(CONF_EXPORT_ENTITY, default=defaults[CONF_EXPORT_ENTITY])
+            ] = selector_export
+        else:
+            schema_dict[vol.Optional(CONF_EXPORT_ENTITY)] = selector_export
+
+        if CONF_CALENDARIFIC_API_KEY in defaults:
+            schema_dict[
                 vol.Optional(
                     CONF_CALENDARIFIC_API_KEY,
-                    default=user_input.get(CONF_CALENDARIFIC_API_KEY) if user_input else None,
-                ): selector.TextSelector(
-                    selector.TextSelectorConfig(
-                        type=selector.TextSelectorType.PASSWORD,
-                    )
-                ),
-            }
-        )
+                    default=defaults[CONF_CALENDARIFIC_API_KEY],
+                )
+            ] = selector_api
+        else:
+            schema_dict[vol.Optional(CONF_CALENDARIFIC_API_KEY)] = selector_api
+
+        data_schema = vol.Schema(schema_dict)
 
         return self.async_show_form(
             step_id="user",
@@ -253,39 +282,72 @@ class TNBCalculatorOptionsFlow(config_entries.OptionsFlow):
                     errors["base"] = api_error
 
             if not errors:
-                return self.async_create_entry(title="", data=user_input)
+                cleaned_input = {
+                    key: value
+                    for key, value in user_input.items()
+                    if value not in (None, "", [])
+                }
+                return self.async_create_entry(title="", data=cleaned_input)
+
+        source_defaults: Dict[str, Any] = {}
+        if user_input is not None:
+            candidate_source = user_input
+        else:
+            candidate_source = {**self.config_entry.data, **self.config_entry.options}
+
+        for key in (CONF_IMPORT_ENTITY, CONF_EXPORT_ENTITY, CONF_CALENDARIFIC_API_KEY):
+            value = candidate_source.get(key)
+            if value is None:
+                continue
+            if isinstance(value, str) and not value.strip():
+                continue
+            source_defaults[key] = value
+
+        selector_import = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain=["sensor", "utility_meter"],
+                device_class=["energy"],
+            )
+        )
+        selector_export = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain=["sensor", "utility_meter"],
+                device_class=["energy"],
+            )
+        )
+        selector_api = selector.TextSelector(
+            selector.TextSelectorConfig(
+                type=selector.TextSelectorType.PASSWORD,
+            )
+        )
+
+        schema_dict: Dict[Any, Any] = {}
+        if CONF_IMPORT_ENTITY in source_defaults:
+            schema_dict[
+                vol.Required(CONF_IMPORT_ENTITY, default=source_defaults[CONF_IMPORT_ENTITY])
+            ] = selector_import
+        else:
+            schema_dict[vol.Required(CONF_IMPORT_ENTITY)] = selector_import
+
+        if CONF_EXPORT_ENTITY in source_defaults:
+            schema_dict[
+                vol.Optional(CONF_EXPORT_ENTITY, default=source_defaults[CONF_EXPORT_ENTITY])
+            ] = selector_export
+        else:
+            schema_dict[vol.Optional(CONF_EXPORT_ENTITY)] = selector_export
+
+        if CONF_CALENDARIFIC_API_KEY in source_defaults:
+            schema_dict[
+                vol.Optional(
+                    CONF_CALENDARIFIC_API_KEY,
+                    default=source_defaults[CONF_CALENDARIFIC_API_KEY],
+                )
+            ] = selector_api
+        else:
+            schema_dict[vol.Optional(CONF_CALENDARIFIC_API_KEY)] = selector_api
 
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        CONF_IMPORT_ENTITY,
-                        default=self.config_entry.data.get(CONF_IMPORT_ENTITY),
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain=["sensor", "utility_meter"],
-                            device_class=["energy"],
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_EXPORT_ENTITY,
-                        default=self.config_entry.data.get(CONF_EXPORT_ENTITY),
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain=["sensor", "utility_meter"],
-                            device_class=["energy"],
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_CALENDARIFIC_API_KEY,
-                        default=self.config_entry.data.get(CONF_CALENDARIFIC_API_KEY),
-                    ): selector.TextSelector(
-                        selector.TextSelectorConfig(
-                            type=selector.TextSelectorType.PASSWORD,
-                        )
-                    ),
-                }
-            ),
+            data_schema=vol.Schema(schema_dict),
             errors=errors,
         )
