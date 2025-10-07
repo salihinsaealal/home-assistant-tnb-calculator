@@ -18,7 +18,7 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v3.7.3b0 (Beta)
+## ⭐ What's New in v3.7.3b1 (Beta)
 
 - **⚙️ Optional Inputs Fixed**: Config flow now accepts blank export sensors and Calendarific API keys without blocking setup.
 - **📊 Improved Predictions**: Switched to direct cost averaging for more accurate monthly forecasts. No more inflated predictions on early days.

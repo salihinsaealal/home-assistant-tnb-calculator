@@ -22,7 +22,7 @@ A Home Assistant integration to calculate your TNB (Tenaga Nasional Berhad) elec
 - **Smart Meter Reset Handling**: Automatically detects and handles daily/monthly meter resets
 - **Verified Accuracy**: Calculations match TNB tariff templates exactly for both ToU and non-ToU
 
-## What's New in v3.7.3b0 (Beta)
+## What's New in v3.7.3b1 (Beta)
 
 - **⚙️ Optional Inputs Fixed**: Config flow now accepts blank export sensors and Calendarific API keys without blocking setup.
 - **📊 Improved Predictions**: Direct cost averaging for accurate forecasts. Example: RM 3.00 over 4 days = RM 0.75/day × 30 = RM 22.50 ± 5%.

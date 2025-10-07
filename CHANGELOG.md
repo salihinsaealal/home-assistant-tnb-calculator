@@ -2,6 +2,22 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [3.7.3b1] - 2025-10-07 (Beta)
+
+### Added
+- **Prediction Method Sensor**: New diagnostic sensor showing which prediction algorithm is active (Cost Trend or Hybrid).
+- **Configuration Scenario Sensor**: New diagnostic sensor displaying setup type (Import Only, Import+Export, ToU, Non-ToU).
+
+### Improved
+- **Prediction Accuracy**: Switched from kWh projection to direct cost averaging for more realistic monthly forecasts.
+  - Formula: `(current_cost / days_elapsed) × days_in_month ± 5%`
+  - Example: RM 3.00 over 4 days = RM 0.75/day × 30 = RM 22.50 ± RM 1.13
+  - Eliminates inflated predictions on early days of the month.
+- **Prediction Attributes**: Added `prediction_tolerance`, `prediction_range_min`, and `prediction_range_max` to show confidence bounds.
+
+### Fixed
+- **Optional Config Inputs**: Config flow now properly accepts blank export sensors and Calendarific API keys without validation errors.
+
 ## [3.7.2] - 2025-10-04
 
 ### Fixed
