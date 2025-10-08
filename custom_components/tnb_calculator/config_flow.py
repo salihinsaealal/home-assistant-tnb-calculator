@@ -20,6 +20,7 @@ from .const import (
     CONF_CALENDARIFIC_API_KEY,
     CONF_EXPORT_ENTITY,
     CONF_IMPORT_ENTITY,
+    CONF_BILLING_START_DAY,
     DOMAIN,
 )
 
@@ -184,7 +185,7 @@ class TNBCalculatorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
 
             # Prepare defaults for form re-rendering (preserve user selections only when meaningful)
-            for key in (CONF_IMPORT_ENTITY, CONF_EXPORT_ENTITY, CONF_CALENDARIFIC_API_KEY):
+            for key in (CONF_IMPORT_ENTITY, CONF_EXPORT_ENTITY, CONF_CALENDARIFIC_API_KEY, CONF_BILLING_START_DAY):
                 value = user_input.get(key)
                 if value is None:
                     continue
@@ -207,6 +208,13 @@ class TNBCalculatorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         selector_api = selector.TextSelector(
             selector.TextSelectorConfig(
                 type=selector.TextSelectorType.PASSWORD,
+            )
+        )
+        selector_billing_day = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=1,
+                max=31,
+                mode=selector.NumberSelectorMode.BOX,
             )
         )
 
@@ -234,6 +242,10 @@ class TNBCalculatorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ] = selector_api
         else:
             schema_dict[vol.Optional(CONF_CALENDARIFIC_API_KEY)] = selector_api
+        
+        # Billing start day (default to 1)
+        billing_day_default = defaults.get(CONF_BILLING_START_DAY, 1)
+        schema_dict[vol.Optional(CONF_BILLING_START_DAY, default=billing_day_default)] = selector_billing_day
 
         data_schema = vol.Schema(schema_dict)
 
@@ -295,7 +307,7 @@ class TNBCalculatorOptionsFlow(config_entries.OptionsFlow):
         else:
             candidate_source = {**self.config_entry.data, **self.config_entry.options}
 
-        for key in (CONF_IMPORT_ENTITY, CONF_EXPORT_ENTITY, CONF_CALENDARIFIC_API_KEY):
+        for key in (CONF_IMPORT_ENTITY, CONF_EXPORT_ENTITY, CONF_CALENDARIFIC_API_KEY, CONF_BILLING_START_DAY):
             value = candidate_source.get(key)
             if value is None:
                 continue
@@ -318,6 +330,13 @@ class TNBCalculatorOptionsFlow(config_entries.OptionsFlow):
         selector_api = selector.TextSelector(
             selector.TextSelectorConfig(
                 type=selector.TextSelectorType.PASSWORD,
+            )
+        )
+        selector_billing_day = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=1,
+                max=31,
+                mode=selector.NumberSelectorMode.BOX,
             )
         )
 
@@ -345,6 +364,10 @@ class TNBCalculatorOptionsFlow(config_entries.OptionsFlow):
             ] = selector_api
         else:
             schema_dict[vol.Optional(CONF_CALENDARIFIC_API_KEY)] = selector_api
+        
+        # Billing start day (default to 1)
+        billing_day_default = source_defaults.get(CONF_BILLING_START_DAY, 1)
+        schema_dict[vol.Optional(CONF_BILLING_START_DAY, default=billing_day_default)] = selector_billing_day
 
         return self.async_show_form(
             step_id="init",

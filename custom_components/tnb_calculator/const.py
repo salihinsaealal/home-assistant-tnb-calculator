@@ -20,6 +20,7 @@ CONF_EXPORT_ENTITY = "export_entity"
 CONF_CALENDARIFIC_API_KEY = "calendarific_api_key"
 CONF_COUNTRY = "country"
 CONF_YEAR = "year"
+CONF_BILLING_START_DAY = "billing_start_day"
 CONF_VERSION = "3.7.3b1"
 
 # Base sensor types (always exposed) - ordered by priority
@@ -277,6 +278,31 @@ BASE_SENSOR_TYPES = {
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
+    # Rate sensors (always visible)
+    "rate_import": {
+        "name": "Import Rate",
+        "unit": "RM/kWh",
+        "state_class": "measurement",
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    "rate_capacity": {
+        "name": "Capacity Rate",
+        "unit": "RM/kWh",
+        "state_class": "measurement",
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    "rate_network": {
+        "name": "Network Rate",
+        "unit": "RM/kWh",
+        "state_class": "measurement",
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    "rate_ict": {
+        "name": "ICT Rate",
+        "unit": "RM/kWh",
+        "state_class": "measurement",
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
 }
 
 # Additional sensors exposed when ToU processing is available
@@ -396,7 +422,7 @@ TOU_SENSOR_TYPES = {
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
-    # Rates (diagnostic - hidden by default)
+    # ToU-specific rates (diagnostic - hidden by default)
     "rate_generation_peak": {
         "name": "Generation Peak Rate",
         "unit": "RM/kWh",
@@ -409,18 +435,6 @@ TOU_SENSOR_TYPES = {
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
-    "rate_capacity": {
-        "name": "Capacity Rate",
-        "unit": "RM/kWh",
-        "state_class": "measurement",
-        "entity_category": EntityCategory.DIAGNOSTIC,
-    },
-    "rate_network": {
-        "name": "Network Rate",
-        "unit": "RM/kWh",
-        "state_class": "measurement",
-        "entity_category": EntityCategory.DIAGNOSTIC,
-    },
     "rate_nem_peak": {
         "name": "NEM Peak Rate",
         "unit": "RM/kWh",
@@ -429,12 +443,6 @@ TOU_SENSOR_TYPES = {
     },
     "rate_nem_offpeak": {
         "name": "NEM Offpeak Rate",
-        "unit": "RM/kWh",
-        "state_class": "measurement",
-        "entity_category": EntityCategory.DIAGNOSTIC,
-    },
-    "rate_ict": {
-        "name": "ICT Rate",
         "unit": "RM/kWh",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,

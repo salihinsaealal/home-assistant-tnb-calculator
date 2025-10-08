@@ -33,6 +33,7 @@ from .const import (
     CONF_EXPORT_ENTITY,
     CONF_IMPORT_ENTITY,
     CONF_YEAR,
+    CONF_BILLING_START_DAY,
     DEFAULT_NAME,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
@@ -121,6 +122,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         self._api_key = config.get(CONF_CALENDARIFIC_API_KEY)
         self._country = config.get(CONF_COUNTRY, "MY")
         self._year = config.get(CONF_YEAR, dt_util.now().year)
+        self._billing_start_day = config.get(CONF_BILLING_START_DAY, 1)
 
         self._tou_enabled = bool(self._api_key)
         self.sensor_definitions = dict(BASE_SENSOR_TYPES)
@@ -190,6 +192,19 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             
             # Only load monthly_data if it has required keys
             if monthly_data and "month" in monthly_data and "year" in monthly_data:
+                # Migration: Add billing_start_day if missing
+                if "billing_start_day" not in monthly_data:
+                    monthly_data["billing_start_day"] = 1
+                    _LOGGER.info("Migrated monthly_data: added billing_start_day=1")
+                
+                # Migration: Add billing_month and billing_year if missing
+                if "billing_month" not in monthly_data or "billing_year" not in monthly_data:
+                    # Use calendar month/year as billing period for existing data
+                    monthly_data["billing_month"] = monthly_data["month"]
+                    monthly_data["billing_year"] = monthly_data["year"]
+                    _LOGGER.info("Migrated monthly_data: added billing_month=%d, billing_year=%d",
+                                monthly_data["billing_month"], monthly_data["billing_year"])
+                
                 self._monthly_data = monthly_data
             else:
                 _LOGGER.debug("No valid monthly data in storage, will create new bucket")
@@ -204,6 +219,17 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             
             # Load historical data
             self._historical_months = stored_data.get("historical_months", {})
+            
+            # Migration: Add billing_start_day to historical months
+            migrated_count = 0
+            for month_key, month_data in self._historical_months.items():
+                if "billing_start_day" not in month_data:
+                    month_data["billing_start_day"] = 1
+                    migrated_count += 1
+            
+            if migrated_count > 0:
+                _LOGGER.info("Migrated %d historical months with billing_start_day=1", migrated_count)
+            
             _LOGGER.debug("Loaded %d months of historical data", len(self._historical_months))
             
             # Load daily data
@@ -545,14 +571,45 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             self._add_validation_error(source, f"entity '{entity_id}' reported non-numeric state '{state.state}'")
             return 0.0
 
+    def _get_billing_period(self, dt: datetime) -> tuple[int, int]:
+        """Calculate billing month/year based on start day.
+        
+        Returns (billing_month, billing_year) tuple.
+        Example: Oct 10 with billing day 15 → (9, 2024) (still in Sept 15 - Oct 14 period)
+        """
+        billing_start_day = self._billing_start_day
+        
+        if dt.day >= billing_start_day:
+            # Current calendar month is the billing month
+            return dt.month, dt.year
+        else:
+            # Still in previous billing period
+            if dt.month == 1:
+                return 12, dt.year - 1
+            else:
+                return dt.month - 1, dt.year
+    
+    def _normalize_billing_day(self, year: int, month: int, day: int) -> int:
+        """Normalize billing day to valid day in given month.
+        
+        Example: day 31 in February → returns 28 or 29
+        """
+        last_day = calendar.monthrange(year, month)[1]
+        return min(day, last_day)
+    
     def _month_changed(self, now: datetime) -> bool:
-        """Check if we've moved to a new month and save historical data if needed."""
+        """Check if we've moved to a new billing period and save historical data if needed."""
         if not hasattr(self, "_monthly_data"):
             return True
         
+        # Get current and stored billing periods
+        current_billing_month, current_billing_year = self._get_billing_period(now)
+        stored_billing_month = self._monthly_data.get("billing_month", self._monthly_data.get("month"))
+        stored_billing_year = self._monthly_data.get("billing_year", self._monthly_data.get("year"))
+        
         month_changed = (
-            now.month != self._monthly_data["month"]
-            or now.year != self._monthly_data["year"]
+            current_billing_month != stored_billing_month
+            or current_billing_year != stored_billing_year
         )
         
         if month_changed and hasattr(self, "_monthly_data"):
@@ -581,9 +638,13 @@ class TNBDataCoordinator(DataUpdateCoordinator):
 
     def _create_month_bucket(self, now: datetime) -> Dict[str, Any]:
         """Create new monthly data bucket."""
+        billing_month, billing_year = self._get_billing_period(now)
         return {
-            "month": now.month,
+            "month": now.month,  # Keep calendar month for reference
             "year": now.year,
+            "billing_month": billing_month,  # Actual billing period
+            "billing_year": billing_year,
+            "billing_start_day": self._billing_start_day,
             "import_total": 0.0,
             "export_total": 0.0,
             "import_peak": 0.0,
@@ -928,6 +989,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             "rate_nem_peak": nem_peak_rate,
             "rate_nem_offpeak": nem_off_rate,
             "rate_ict": ict_rate,
+            "rate_import": 0.0,  # Not used in ToU (uses peak/offpeak instead)
         }
 
     def _calculate_non_tou_costs(
@@ -982,6 +1044,10 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             "total_cost": self._round_currency(subtotal),
             "peak_cost": self._round_currency(0.0),
             "off_peak_cost": self._round_currency(total_import_caj),
+            "rate_import": 0.2703,  # Generation rate for non-ToU
+            "rate_capacity": 0.0455,
+            "rate_network": 0.1285,
+            "rate_ict": ict_rate,
         }
 
     def _calculate_predictions(
