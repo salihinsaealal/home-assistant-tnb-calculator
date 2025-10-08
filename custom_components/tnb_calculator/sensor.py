@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 import voluptuous as vol
 
 from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity
+from homeassistant.components.number import NumberEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_NAME,
@@ -14,6 +15,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -101,6 +103,14 @@ async def async_setup_entry(
         )
         for sensor_type, sensor_config in coordinator.sensor_definitions.items()
     ]
+    
+    # Add billing start day number entity
+    billing_day_number = TNBBillingStartDayNumber(
+        coordinator,
+        config_entry,
+        device.id,
+    )
+    sensors.append(billing_day_number)
 
     async_add_entities(sensors)
 
@@ -204,6 +214,18 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                     monthly_data["billing_year"] = monthly_data["year"]
                     _LOGGER.info("Migrated monthly_data: added billing_month=%d, billing_year=%d",
                                 monthly_data["billing_month"], monthly_data["billing_year"])
+                
+                # Migration: Add calibration structure if missing
+                if "calibration" not in monthly_data:
+                    monthly_data["calibration"] = {
+                        "import_baseline": 0.0,
+                        "peak_baseline": 0.0,
+                        "offpeak_baseline": 0.0,
+                        "export_baseline": 0.0,
+                        "last_calibrated": None,
+                        "distribution_method": None,
+                    }
+                    _LOGGER.info("Migrated monthly_data: added calibration structure")
                 
                 self._monthly_data = monthly_data
             else:
@@ -399,7 +421,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 "period_status": period_status,
                 "last_update": now.isoformat(),
                 "current_month": now.strftime("%Y-%m"),
-                "monthly_reset_day": 1,
+                "billing_start_day": self._billing_start_day,
+                "monthly_reset_day": self._billing_start_day,  # Deprecated, kept for compatibility
                 "is_holiday": is_holiday,
             }
 
@@ -446,10 +469,15 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             result["today_import_offpeak_kwh"] = self._round_energy(daily_offpeak)
             
             # Calculate today's costs
-            daily_tou_costs = self._calculate_tou_costs(daily_peak, daily_offpeak, daily_export)
             daily_non_tou_costs = self._calculate_non_tou_costs(daily_import, daily_export)
-            result["today_cost_tou"] = daily_tou_costs["total_cost"]
             result["today_cost_non_tou"] = daily_non_tou_costs["total_cost"]
+            
+            if self._tou_enabled:
+                daily_tou_costs = self._calculate_tou_costs(daily_peak, daily_offpeak, daily_export)
+                result["today_cost_tou"] = daily_tou_costs["total_cost"]
+            else:
+                # ToU not enabled - set to None (shows as "unavailable")
+                result["today_cost_tou"] = None
             
             # Binary sensors for automations
             result["peak_period"] = "on" if self._is_peak_period(now, is_holiday) else "off"
@@ -541,6 +569,161 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         }
         
         return {"state": state, "attributes": attributes}
+    
+    async def async_set_energy_values(self, call) -> None:
+        """Service to set exact energy values with distribution options."""
+        import_total = call.data["import_total"]
+        distribution = call.data.get("distribution", "proportional")
+        export_total = call.data.get("export_total")
+        
+        # Get current values
+        current_import = self._monthly_data.get("import_total", 0)
+        current_peak = self._monthly_data.get("import_peak", 0)
+        current_offpeak = self._monthly_data.get("import_offpeak", 0)
+        
+        # Calculate difference
+        import_diff = import_total - current_import
+        
+        # Distribute based on option
+        if distribution == "proportional":
+            # Maintain current ratio
+            if current_import > 0:
+                peak_ratio = current_peak / current_import
+            else:
+                peak_ratio = 0.6  # Default 60% peak
+            
+            new_peak = import_total * peak_ratio
+            new_offpeak = import_total * (1 - peak_ratio)
+        
+        elif distribution == "peak_only":
+            # Add difference to peak only
+            new_peak = current_peak + import_diff
+            new_offpeak = current_offpeak
+        
+        elif distribution == "offpeak_only":
+            # Add difference to off-peak only
+            new_peak = current_peak
+            new_offpeak = current_offpeak + import_diff
+        
+        elif distribution == "auto":
+            # Auto-detect based on current time
+            now = dt_util.now()
+            is_holiday = self._is_holiday(now)
+            is_peak = self._is_peak_period(now, is_holiday)
+            
+            if is_peak:
+                # Currently peak time - assume adjustment is peak-related
+                new_peak = current_peak + import_diff
+                new_offpeak = current_offpeak
+                _LOGGER.info("Auto-distribution: Applied to peak (current time is peak period)")
+            else:
+                # Currently off-peak - assume adjustment is off-peak-related
+                new_peak = current_peak
+                new_offpeak = current_offpeak + import_diff
+                _LOGGER.info("Auto-distribution: Applied to off-peak (current time is off-peak period)")
+        
+        elif distribution == "manual":
+            # User provides exact values
+            new_peak = call.data.get("import_peak")
+            new_offpeak = call.data.get("import_offpeak")
+            
+            if new_peak is None or new_offpeak is None:
+                raise ValueError("import_peak and import_offpeak required when distribution='manual'")
+            
+            # Validate sum
+            if abs((new_peak + new_offpeak) - import_total) > 0.01:
+                raise ValueError(f"Peak ({new_peak}) + Off-peak ({new_offpeak}) must equal Import Total ({import_total})")
+        
+        else:
+            raise ValueError(f"Invalid distribution option: {distribution}")
+        
+        # Validate non-negative
+        if new_peak < 0 or new_offpeak < 0:
+            raise ValueError("Peak and off-peak values cannot be negative")
+        
+        # Get sensor readings for baseline calculation
+        sensor_import = self._get_entity_state(self._import_entity, "Import")
+        sensor_export = self._get_entity_state(self._export_entity, "Export")
+        
+        # Calculate baselines (offset from sensor)
+        import_baseline = import_total - sensor_import
+        peak_baseline = new_peak - current_peak
+        offpeak_baseline = new_offpeak - current_offpeak
+        
+        # Store calibration
+        if "calibration" not in self._monthly_data:
+            self._monthly_data["calibration"] = {}
+        
+        self._monthly_data["calibration"]["import_baseline"] = import_baseline
+        self._monthly_data["calibration"]["peak_baseline"] = peak_baseline
+        self._monthly_data["calibration"]["offpeak_baseline"] = offpeak_baseline
+        self._monthly_data["calibration"]["last_calibrated"] = dt_util.now().isoformat()
+        self._monthly_data["calibration"]["distribution_method"] = distribution
+        
+        # Update values
+        self._monthly_data["import_total"] = import_total
+        self._monthly_data["import_peak"] = new_peak
+        self._monthly_data["import_offpeak"] = new_offpeak
+        
+        # Export calibration
+        if export_total is not None:
+            export_baseline = export_total - sensor_export
+            self._monthly_data["calibration"]["export_baseline"] = export_baseline
+            self._monthly_data["export_total"] = export_total
+        
+        # Log calibration
+        _LOGGER.info(
+            "Energy calibration applied: Import %.2f kWh (Peak: %.2f, Off-peak: %.2f) using '%s' distribution",
+            import_total, new_peak, new_offpeak, distribution
+        )
+        
+        # Save and refresh
+        await self._save_monthly_data()
+        await self.async_request_refresh()
+    
+    async def async_adjust_energy_values(self, call) -> None:
+        """Service to apply offset adjustments to current values."""
+        import_adj = call.data.get("import_adjustment", 0)
+        peak_adj = call.data.get("peak_adjustment", 0)
+        offpeak_adj = call.data.get("offpeak_adjustment", 0)
+        export_adj = call.data.get("export_adjustment", 0)
+        
+        # Apply adjustments
+        if import_adj != 0:
+            self._monthly_data["calibration"]["import_baseline"] += import_adj
+            self._monthly_data["import_total"] += import_adj
+        
+        if peak_adj != 0 or offpeak_adj != 0:
+            # Validate sum still equals total
+            new_peak = self._monthly_data["import_peak"] + peak_adj
+            new_offpeak = self._monthly_data["import_offpeak"] + offpeak_adj
+            
+            if abs((new_peak + new_offpeak) - self._monthly_data["import_total"]) > 0.01:
+                raise ValueError("Peak + Off-peak adjustment must maintain Import Total")
+            
+            self._monthly_data["calibration"]["peak_baseline"] += peak_adj
+            self._monthly_data["calibration"]["offpeak_baseline"] += offpeak_adj
+            self._monthly_data["import_peak"] = new_peak
+            self._monthly_data["import_offpeak"] = new_offpeak
+        
+        if export_adj != 0:
+            self._monthly_data["calibration"]["export_baseline"] += export_adj
+            self._monthly_data["export_total"] += export_adj
+        
+        # Update calibration timestamp
+        if "calibration" not in self._monthly_data:
+            self._monthly_data["calibration"] = {}
+        self._monthly_data["calibration"]["last_calibrated"] = dt_util.now().isoformat()
+        
+        # Log adjustment
+        _LOGGER.info(
+            "Energy adjustment applied: Import %+.2f kWh (Peak: %+.2f, Off-peak: %+.2f, Export: %+.2f)",
+            import_adj, peak_adj, offpeak_adj, export_adj
+        )
+        
+        # Save and refresh
+        await self._save_monthly_data()
+        await self.async_request_refresh()
 
     def _get_entity_state(self, entity_id: Optional[str], source: str) -> float:
         """Get numeric state from entity, return 0.0 if unavailable."""
@@ -643,6 +826,14 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             "import_offpeak": 0.0,
             "import_last": self._get_entity_state(self._import_entity, "Import entity"),
             "export_last": self._get_entity_state(self._export_entity, "Export entity"),
+            "calibration": {
+                "import_baseline": 0.0,
+                "peak_baseline": 0.0,
+                "offpeak_baseline": 0.0,
+                "export_baseline": 0.0,
+                "last_calibrated": None,
+                "distribution_method": None,
+            },
         }
 
     def _day_changed(self, now: datetime) -> bool:
@@ -1267,3 +1458,50 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
         state = await self.async_get_last_state()
         if state:
             self._attr_state = state.state
+
+
+class TNBBillingStartDayNumber(CoordinatorEntity, NumberEntity):
+    """Number entity to set billing start day."""
+    
+    _attr_native_min_value = 1
+    _attr_native_max_value = 31
+    _attr_native_step = 1
+    _attr_mode = "box"
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:calendar-start"
+    
+    def __init__(
+        self,
+        coordinator: TNBDataCoordinator,
+        config_entry: ConfigEntry,
+        device_id: str,
+    ) -> None:
+        """Initialize the number entity."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._attr_name = f"{DEFAULT_NAME} Billing Start Day"
+        self._attr_unique_id = f"{config_entry.entry_id}_billing_start_day"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, config_entry.entry_id)},
+        }
+    
+    @property
+    def native_value(self) -> float:
+        """Return the current billing start day."""
+        return self.coordinator._billing_start_day
+    
+    async def async_set_native_value(self, value: float) -> None:
+        """Update billing start day."""
+        new_day = int(value)
+        
+        # Update config entry
+        self.hass.config_entries.async_update_entry(
+            self._config_entry,
+            data={**self._config_entry.data, CONF_BILLING_START_DAY: new_day}
+        )
+        
+        # Update coordinator
+        self.coordinator._billing_start_day = new_day
+        
+        # Trigger refresh
+        await self.coordinator.async_request_refresh()

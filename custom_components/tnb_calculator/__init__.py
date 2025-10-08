@@ -28,6 +28,27 @@ SERVICE_RESET_STORAGE_SCHEMA = vol.Schema({
     vol.Required("confirm"): cv.string,
 })
 
+SERVICE_SET_ENERGY_VALUES_SCHEMA = vol.Schema({
+    vol.Required("import_total"): cv.positive_float,
+    vol.Optional("distribution", default="proportional"): vol.In([
+        "proportional", 
+        "peak_only", 
+        "offpeak_only", 
+        "auto",
+        "manual"
+    ]),
+    vol.Optional("import_peak"): cv.positive_float,
+    vol.Optional("import_offpeak"): cv.positive_float,
+    vol.Optional("export_total"): cv.positive_float,
+})
+
+SERVICE_ADJUST_ENERGY_VALUES_SCHEMA = vol.Schema({
+    vol.Optional("import_adjustment", default=0): vol.Coerce(float),
+    vol.Optional("peak_adjustment", default=0): vol.Coerce(float),
+    vol.Optional("offpeak_adjustment", default=0): vol.Coerce(float),
+    vol.Optional("export_adjustment", default=0): vol.Coerce(float),
+})
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up TNB Calculator from a config entry."""
@@ -138,6 +159,40 @@ Monthly Export: {coordinator.data.get('export_energy', 0):.2f} kWh
             "reset_storage",
             handle_reset_storage,
             schema=SERVICE_RESET_STORAGE_SCHEMA,
+        )
+        
+        async def handle_set_energy_values(call: ServiceCall) -> None:
+            """Handle setting exact energy values."""
+            coordinator_data = hass.data[DOMAIN].get(entry.entry_id)
+            if not coordinator_data or "coordinator" not in coordinator_data:
+                _LOGGER.error("Could not find TNB Calculator coordinator for set_energy_values")
+                return
+            
+            coordinator: TNBDataCoordinator = coordinator_data["coordinator"]
+            await coordinator.async_set_energy_values(call)
+        
+        hass.services.async_register(
+            DOMAIN,
+            "set_energy_values",
+            handle_set_energy_values,
+            schema=SERVICE_SET_ENERGY_VALUES_SCHEMA,
+        )
+        
+        async def handle_adjust_energy_values(call: ServiceCall) -> None:
+            """Handle adjusting energy values with offsets."""
+            coordinator_data = hass.data[DOMAIN].get(entry.entry_id)
+            if not coordinator_data or "coordinator" not in coordinator_data:
+                _LOGGER.error("Could not find TNB Calculator coordinator for adjust_energy_values")
+                return
+            
+            coordinator: TNBDataCoordinator = coordinator_data["coordinator"]
+            await coordinator.async_adjust_energy_values(call)
+        
+        hass.services.async_register(
+            DOMAIN,
+            "adjust_energy_values",
+            handle_adjust_energy_values,
+            schema=SERVICE_ADJUST_ENERGY_VALUES_SCHEMA,
         )
 
         return True
