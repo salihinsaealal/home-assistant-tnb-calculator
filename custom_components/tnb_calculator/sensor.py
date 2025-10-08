@@ -420,17 +420,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 # Add detailed ToU breakdown
                 result.update(tou_costs)
             else:
-                # If ToU not enabled, estimate ToU cost using import_total split
-                # Assume 40% peak, 60% off-peak as rough estimate
-                estimated_peak = monthly_import * 0.4
-                estimated_offpeak = monthly_import * 0.6
-                tou_costs_estimate = self._calculate_tou_costs(
-                    estimated_peak,
-                    estimated_offpeak,
-                    monthly_export,
-                )
-                result["total_cost_tou"] = tou_costs_estimate["total_cost"]
-                # Add non-ToU breakdown
+                # ToU not enabled - set to None (shows as "unavailable")
+                result["total_cost_tou"] = None
+                # Add non-ToU breakdown for peak/off-peak cost sensors
                 result["peak_cost"] = non_tou_costs.get("peak_cost", 0.0)
                 result["off_peak_cost"] = non_tou_costs.get("off_peak_cost", 0.0)
 
