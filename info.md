@@ -22,7 +22,7 @@ A Home Assistant integration to calculate your TNB (Tenaga Nasional Berhad) elec
 - **Smart Meter Reset Handling**: Automatically detects and handles daily/monthly meter resets
 - **Verified Accuracy**: Calculations match TNB tariff templates exactly for both ToU and non-ToU
 
-## What's New in v3.7.5
+## What's New in v3.7.6
 
 - **📅 Custom Billing Start Day**: Set your TNB billing cycle start date (1-31) to match your actual bill period
 - **🔧 Energy Calibration Services**: Set exact values or apply adjustments with 5 distribution options

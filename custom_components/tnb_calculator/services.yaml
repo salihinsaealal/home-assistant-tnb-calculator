@@ -49,10 +49,10 @@ reset_storage:
       selector:
         text:
 
-set_energy_values:
-  name: Set Energy Values
+set_import_energy_values:
+  name: Set Import Energy Values
   description: |
-    Set exact energy values for calibration. Choose how to distribute the change between peak and off-peak.
+    Set exact import energy values for calibration. Choose how to distribute the change between peak and off-peak.
     
     Examples:
     • Proportional: import_total: 1500, distribution: "proportional"
@@ -61,7 +61,7 @@ set_energy_values:
   fields:
     import_total:
       name: Import Total (kWh)
-      description: Target import energy value in kWh
+      description: "📊 Target import energy value in kWh. Used in: ALL modes"
       required: true
       example: 1500.5
       selector:
@@ -73,7 +73,7 @@ set_energy_values:
           unit_of_measurement: "kWh"
     distribution:
       name: Distribution Method
-      description: How to distribute the change between peak and off-peak
+      description: "🔀 How to distribute the change between peak and off-peak. Choose 'manual' if you want to specify exact peak/off-peak values."
       required: false
       default: "proportional"
       example: "proportional"
@@ -91,9 +91,10 @@ set_energy_values:
             - label: "Manual (specify exact peak/off-peak)"
               value: "manual"
     import_peak:
-      name: Import Peak (kWh)
-      description: Exact peak import value (required if distribution is 'manual')
+      name: "⚡ Import Peak (kWh)"
+      description: "⚠️ ONLY for 'manual' mode: Exact peak import value. Peak + Off-peak must equal Import Total."
       required: false
+      advanced: true
       example: 650.0
       selector:
         number:
@@ -103,9 +104,10 @@ set_energy_values:
           mode: box
           unit_of_measurement: "kWh"
     import_offpeak:
-      name: Import Off-Peak (kWh)
-      description: Exact off-peak import value (required if distribution is 'manual')
+      name: "🌙 Import Off-Peak (kWh)"
+      description: "⚠️ ONLY for 'manual' mode: Exact off-peak import value. Peak + Off-peak must equal Import Total."
       required: false
+      advanced: true
       example: 850.5
       selector:
         number:
@@ -118,6 +120,7 @@ set_energy_values:
       name: Export Total (kWh)
       description: Target export energy value in kWh (optional)
       required: false
+      advanced: true
       example: 250.0
       selector:
         number:
@@ -127,15 +130,12 @@ set_energy_values:
           mode: box
           unit_of_measurement: "kWh"
 
-set_export_values:
-  name: Set Export Values
+set_export_energy_values:
+  name: Set Export Energy Values
   description: |
-    Set exact export energy values for calibration. Choose how to distribute the change between peak and off-peak.
+    Set exact export energy value for calibration.
     
-    Examples:
-    • Proportional: export_total: 250, distribution: "proportional"
-    • Peak only: export_total: 250, distribution: "peak_only"
-    • Manual: export_total: 250, distribution: "manual", export_peak: 100, export_offpeak: 150
+    Example: export_total: 250.5
   fields:
     export_total:
       name: Export Total (kWh)
@@ -149,65 +149,21 @@ set_export_values:
           step: 0.1
           mode: box
           unit_of_measurement: "kWh"
-    distribution:
-      name: Distribution Method
-      description: How to distribute the change between peak and off-peak
-      required: false
-      default: "proportional"
-      example: "proportional"
-      selector:
-        select:
-          options:
-            - label: "Proportional (maintain current ratio)"
-              value: "proportional"
-            - label: "Peak Only (change affects peak only)"
-              value: "peak_only"
-            - label: "Off-Peak Only (change affects off-peak only)"
-              value: "offpeak_only"
-            - label: "Auto (detect based on current time)"
-              value: "auto"
-            - label: "Manual (specify exact peak/off-peak)"
-              value: "manual"
-    export_peak:
-      name: Export Peak (kWh)
-      description: Exact peak export value (required if distribution is 'manual')
-      required: false
-      example: 100.0
-      selector:
-        number:
-          min: 0
-          max: 100000
-          step: 0.1
-          mode: box
-          unit_of_measurement: "kWh"
-    export_offpeak:
-      name: Export Off-Peak (kWh)
-      description: Exact off-peak export value (required if distribution is 'manual')
-      required: false
-      example: 150.0
-      selector:
-        number:
-          min: 0
-          max: 100000
-          step: 0.1
-          mode: box
-          unit_of_measurement: "kWh"
 
-adjust_energy_values:
-  name: Adjust Energy Values
+adjust_import_energy_values:
+  name: Adjust Import Energy Values
   description: |
-    Apply offset adjustments (add/subtract) to current energy values.
+    Apply offset adjustments (add/subtract) to import energy values with distribution options.
     
     Examples:
-    • Add 20 kWh to import: import_adjustment: 20
-    • Subtract 5 kWh from export: export_adjustment: -5
-    • Adjust peak/offpeak: peak_adjustment: 10, offpeak_adjustment: 10
+    • Proportional: import_adjustment: 20, distribution: "proportional"
+    • Peak only: import_adjustment: 20, distribution: "peak_only"
+    • Manual: import_adjustment: 20, distribution: "manual", peak_adjustment: 10, offpeak_adjustment: 10
   fields:
     import_adjustment:
       name: Import Adjustment (kWh)
-      description: Amount to add (+) or subtract (-) from import total
-      required: false
-      default: 0
+      description: "📊 Amount to add (+) or subtract (-) from import total. Used in: ALL modes"
+      required: true
       example: 20.5
       selector:
         number:
@@ -216,11 +172,30 @@ adjust_energy_values:
           step: 0.1
           mode: box
           unit_of_measurement: "kWh"
-    peak_adjustment:
-      name: Peak Adjustment (kWh)
-      description: Amount to add (+) or subtract (-) from peak import
+    distribution:
+      name: Distribution Method
+      description: "🔀 How to distribute the adjustment between peak and off-peak. Choose 'manual' if you want to specify exact peak/off-peak adjustments."
       required: false
-      default: 0
+      default: "proportional"
+      example: "proportional"
+      selector:
+        select:
+          options:
+            - label: "Proportional (maintain current ratio)"
+              value: "proportional"
+            - label: "Peak Only (adjustment affects peak only)"
+              value: "peak_only"
+            - label: "Off-Peak Only (adjustment affects off-peak only)"
+              value: "offpeak_only"
+            - label: "Auto (detect based on current time)"
+              value: "auto"
+            - label: "Manual (specify exact peak/off-peak adjustments)"
+              value: "manual"
+    peak_adjustment:
+      name: "⚡ Peak Adjustment (kWh)"
+      description: "⚠️ ONLY for 'manual' mode: Exact peak adjustment. Peak + Off-peak must equal Import Adjustment."
+      required: false
+      advanced: true
       example: 10.0
       selector:
         number:
@@ -230,10 +205,10 @@ adjust_energy_values:
           mode: box
           unit_of_measurement: "kWh"
     offpeak_adjustment:
-      name: Off-Peak Adjustment (kWh)
-      description: Amount to add (+) or subtract (-) from off-peak import
+      name: "🌙 Off-Peak Adjustment (kWh)"
+      description: "⚠️ ONLY for 'manual' mode: Exact off-peak adjustment. Peak + Off-peak must equal Import Adjustment."
       required: false
-      default: 0
+      advanced: true
       example: 10.5
       selector:
         number:
@@ -242,11 +217,18 @@ adjust_energy_values:
           step: 0.1
           mode: box
           unit_of_measurement: "kWh"
+
+adjust_export_energy_values:
+  name: Adjust Export Energy Values
+  description: |
+    Apply offset adjustment (add/subtract) to export energy value.
+    
+    Example: export_adjustment: -5.0
+  fields:
     export_adjustment:
       name: Export Adjustment (kWh)
       description: Amount to add (+) or subtract (-) from export total
-      required: false
-      default: 0
+      required: true
       example: -5.0
       selector:
         number:
