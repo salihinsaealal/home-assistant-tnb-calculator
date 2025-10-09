@@ -54,6 +54,8 @@ set_import_energy_values:
   description: |
     Set exact import energy values for calibration. Choose how to distribute the change between peak and off-peak.
     
+    ⏱️ Sensor values refresh automatically within ~5 minutes (coordinator interval). Use **Home Assistant → Developer Tools → Services → `homeassistant.update_entity`** or reload the integration for instant updates.
+    
     Examples:
     • Proportional: import_total: 1500, distribution: "proportional"
     • Peak only: import_total: 1500, distribution: "peak_only"
@@ -73,7 +75,7 @@ set_import_energy_values:
           unit_of_measurement: "kWh"
     distribution:
       name: Distribution Method
-      description: "🔀 How to distribute the change between peak and off-peak. Choose 'manual' if you want to specify exact peak/off-peak values."
+      description: "🔀 How to distribute the change between peak and off-peak. Choose 'manual' if you want to specify exact peak/off-peak values. Non-ToU users can pick any option (only the total import is used)."
       required: false
       default: "proportional"
       example: "proportional"
@@ -132,6 +134,8 @@ set_export_energy_values:
   description: |
     Set exact export energy value for calibration.
     
+    ⏱️ Sensor values refresh automatically within ~5 minutes (coordinator interval). Use **Home Assistant → Developer Tools → Services → `homeassistant.update_entity`** or reload the integration for instant updates.
+    
     Example: export_total: 250.5
   fields:
     export_total:
@@ -152,6 +156,8 @@ adjust_import_energy_values:
   description: |
     Apply offset adjustments (add/subtract) to import energy values with distribution options.
     
+    ⏱️ Sensor values refresh automatically within ~5 minutes (coordinator interval). Use **Home Assistant → Developer Tools → Services → `homeassistant.update_entity`** or reload the integration for instant updates.
+    
     Examples:
     • Proportional: import_adjustment: 20, distribution: "proportional"
     • Peak only: import_adjustment: 20, distribution: "peak_only"
@@ -171,7 +177,7 @@ adjust_import_energy_values:
           unit_of_measurement: "kWh"
     distribution:
       name: Distribution Method
-      description: "🔀 How to distribute the adjustment between peak and off-peak. Choose 'manual' if you want to specify exact peak/off-peak adjustments."
+      description: "🔀 How to distribute the adjustment between peak and off-peak. Choose 'manual' if you want to specify exact peak/off-peak adjustments. Non-ToU users can pick any option (only the total import is used)."
       required: false
       default: "proportional"
       example: "proportional"
@@ -217,6 +223,8 @@ adjust_export_energy_values:
   name: Adjust Export Energy Values
   description: |
     Apply offset adjustment (add/subtract) to export energy value.
+    
+    ⏱️ Sensor values refresh automatically within ~5 minutes (coordinator interval). Use **Home Assistant → Developer Tools → Services → `homeassistant.update_entity`** or reload the integration for instant updates.
     
     Example: export_adjustment: -5.0
   fields:
