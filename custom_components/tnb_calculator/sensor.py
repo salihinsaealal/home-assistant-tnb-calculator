@@ -311,6 +311,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         try:
             self._validation_errors = []
             now = dt_util.now()
+            
+            # Update ToU status in case API key was added/removed via reconfigure
+            self._tou_enabled = bool(self._api_key)
 
             # Load stored data (force reload to pick up calibration changes)
             await self._load_monthly_data(force_reload=True)
@@ -541,7 +544,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         has_import = bool(self._import_entity)
         has_export = bool(self._export_entity)
         has_api = bool(self._api_key)
-        tou_enabled = self._tou_enabled
+        # Check ToU status dynamically in case API key was added after init
+        tou_enabled = bool(self._api_key)
         
         # Determine state
         if has_export and tou_enabled:
@@ -676,12 +680,11 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             import_total, new_peak, new_offpeak, distribution
         )
         
-        # Save and refresh immediately
+        # Save to storage
         await self._save_monthly_data()
-        await self.async_refresh()
         
-        # Force immediate entity state update
-        self.async_update_listeners()
+        # Force immediate refresh - this will reload storage and update all entities
+        await self.async_refresh()
     
     async def async_adjust_import_energy_values(self, call) -> None:
         """Service to apply offset adjustments to import values with distribution options."""
@@ -767,12 +770,11 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             import_adj, peak_adj, offpeak_adj, distribution
         )
         
-        # Save and refresh immediately
+        # Save to storage
         await self._save_monthly_data()
-        await self.async_refresh()
         
-        # Force immediate entity state update
-        self.async_update_listeners()
+        # Force immediate refresh - this will reload storage and update all entities
+        await self.async_refresh()
     
     async def async_adjust_export_energy_values(self, call) -> None:
         """Service to apply offset adjustment to export value."""
@@ -801,12 +803,11 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             export_adj
         )
         
-        # Save and refresh immediately
+        # Save to storage
         await self._save_monthly_data()
-        await self.async_refresh()
         
-        # Force immediate entity state update
-        self.async_update_listeners()
+        # Force immediate refresh - this will reload storage and update all entities
+        await self.async_refresh()
     
     async def async_set_export_values(self, call) -> None:
         """Service to set exact export energy value."""
@@ -841,12 +842,11 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             export_total
         )
         
-        # Save and refresh immediately
+        # Save to storage
         await self._save_monthly_data()
-        await self.async_refresh()
         
-        # Force immediate entity state update
-        self.async_update_listeners()
+        # Force immediate refresh - this will reload storage and update all entities
+        await self.async_refresh()
 
     def _get_entity_state(self, entity_id: Optional[str], source: str) -> float:
         """Get numeric state from entity, return 0.0 if unavailable."""
