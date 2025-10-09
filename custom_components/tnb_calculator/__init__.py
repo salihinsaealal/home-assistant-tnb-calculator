@@ -31,10 +31,10 @@ SERVICE_RESET_STORAGE_SCHEMA = vol.Schema({
 SERVICE_SET_IMPORT_ENERGY_VALUES_SCHEMA = vol.Schema({
     vol.Required("import_total"): cv.positive_float,
     vol.Optional("distribution", default="proportional"): vol.In([
-        "proportional", 
+        "auto",
         "peak_only", 
         "offpeak_only", 
-        "auto",
+        "proportional", 
         "manual"
     ]),
     vol.Optional("import_peak"): cv.positive_float,
@@ -48,10 +48,10 @@ SERVICE_SET_EXPORT_ENERGY_VALUES_SCHEMA = vol.Schema({
 SERVICE_ADJUST_IMPORT_ENERGY_VALUES_SCHEMA = vol.Schema({
     vol.Required("import_adjustment"): vol.Coerce(float),
     vol.Optional("distribution", default="proportional"): vol.In([
-        "proportional", 
+        "auto",
         "peak_only", 
         "offpeak_only", 
-        "auto",
+        "proportional", 
         "manual"
     ]),
     vol.Optional("peak_adjustment"): vol.Coerce(float),
@@ -169,7 +169,7 @@ Monthly Export: {coordinator.data.get('export_energy', 0):.2f} kWh
             coordinator: TNBDataCoordinator = coordinator_data["coordinator"]
             await coordinator.async_reset_storage()
             _LOGGER.info("TNB Calculator data reset requested via service")
-            await coordinator.async_request_refresh()
+            await coordinator.async_refresh()
 
         hass.services.async_register(
             DOMAIN,

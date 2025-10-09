@@ -52,14 +52,9 @@ reset_storage:
 set_import_energy_values:
   name: Set Import Energy Values
   description: |
-    Set exact import energy values for calibration. Choose how to distribute the change between peak and off-peak.
+    Set exact import energy values for calibration.
     
-    ⏱️ Sensor values refresh automatically within ~5 minutes (coordinator interval). Use **Home Assistant → Developer Tools → Services → `homeassistant.update_entity`** or reload the integration for instant updates.
-    
-    Examples:
-    • Proportional: import_total: 1500, distribution: "proportional"
-    • Peak only: import_total: 1500, distribution: "peak_only"
-    • Manual: import_total: 1500, distribution: "manual", import_peak: 650, import_offpeak: 850
+    ⏱️ Note: Values update immediately in storage but sensor display has a delay. For instant sensor refresh, reload the integration.
   fields:
     import_total:
       name: Import Total (kWh)
@@ -75,21 +70,21 @@ set_import_energy_values:
           unit_of_measurement: "kWh"
     distribution:
       name: Distribution Method
-      description: "🔀 How to distribute the change between peak and off-peak. Choose 'manual' if you want to specify exact peak/off-peak values. Non-ToU users can pick any option (only the total import is used)."
+      description: "🔀 How to distribute between peak and off-peak periods."
       required: false
       default: "proportional"
-      example: "proportional"
+      example: "auto"
       selector:
         select:
           options:
-            - label: "Proportional (maintain current ratio)"
-              value: "proportional"
+            - label: "Auto (detect based on current time)"
+              value: "auto"
             - label: "Peak Only (change affects peak only)"
               value: "peak_only"
             - label: "Off-Peak Only (change affects off-peak only)"
               value: "offpeak_only"
-            - label: "Auto (detect based on current time)"
-              value: "auto"
+            - label: "Proportional (split by current peak/off-peak ratio)"
+              value: "proportional"
             - label: "Manual (specify exact peak/off-peak)"
               value: "manual"
     import_peak:
@@ -142,14 +137,9 @@ set_export_energy_values:
 adjust_import_energy_values:
   name: Adjust Import Energy Values
   description: |
-    Apply offset adjustments (add/subtract) to import energy values with distribution options.
+    Apply offset adjustments (add/subtract) to import energy values.
     
-    ⏱️ Sensor values refresh automatically within ~5 minutes (coordinator interval). Use **Home Assistant → Developer Tools → Services → `homeassistant.update_entity`** or reload the integration for instant updates.
-    
-    Examples:
-    • Proportional: import_adjustment: 20, distribution: "proportional"
-    • Peak only: import_adjustment: 20, distribution: "peak_only"
-    • Manual: import_adjustment: 20, distribution: "manual", peak_adjustment: 10, offpeak_adjustment: 10
+    ⏱️ Note: Values update immediately in storage but sensor display has a delay. For instant sensor refresh, reload the integration.
   fields:
     import_adjustment:
       name: Import Adjustment (kWh)
@@ -165,21 +155,21 @@ adjust_import_energy_values:
           unit_of_measurement: "kWh"
     distribution:
       name: Distribution Method
-      description: "🔀 How to distribute the adjustment between peak and off-peak. Choose 'manual' if you want to specify exact peak/off-peak adjustments. Non-ToU users can pick any option (only the total import is used)."
+      description: "🔀 How to distribute the adjustment between peak and off-peak periods."
       required: false
       default: "proportional"
-      example: "proportional"
+      example: "auto"
       selector:
         select:
           options:
-            - label: "Proportional (maintain current ratio)"
-              value: "proportional"
+            - label: "Auto (detect based on current time)"
+              value: "auto"
             - label: "Peak Only (adjustment affects peak only)"
               value: "peak_only"
             - label: "Off-Peak Only (adjustment affects off-peak only)"
               value: "offpeak_only"
-            - label: "Auto (detect based on current time)"
-              value: "auto"
+            - label: "Proportional (split by current peak/off-peak ratio)"
+              value: "proportional"
             - label: "Manual (specify exact peak/off-peak adjustments)"
               value: "manual"
     peak_adjustment:
