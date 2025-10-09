@@ -104,13 +104,20 @@ async def async_setup_entry(
         for sensor_type, sensor_config in coordinator.sensor_definitions.items()
     ]
     
-    # Add billing start day number entity
+    # Add billing start day helper entities
     billing_day_number = TNBBillingStartDayNumber(
         coordinator,
         config_entry,
         device.id,
     )
     sensors.append(billing_day_number)
+
+    billing_day_status = TNBBillingStartDayStatusSensor(
+        coordinator,
+        config_entry,
+        device.id,
+    )
+    sensors.append(billing_day_status)
 
     async_add_entities(sensors)
 
@@ -1522,7 +1529,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "3.7.14",
+            "sw_version": "3.7.15",
         }
 
     @property
@@ -1665,4 +1672,54 @@ class TNBBillingStartDayNumber(CoordinatorEntity, NumberEntity):
         if pending_day is not None:
             attrs["billing_start_day_pending"] = pending_day
             attrs["note"] = f"Will switch to {pending_day} next billing cycle"
+        return attrs
+
+
+class TNBBillingStartDayStatusSensor(CoordinatorEntity, SensorEntity):
+    """Sensor entity showing billing start day with pending change info."""
+
+    _attr_icon = "mdi:calendar-start"
+
+    def __init__(
+        self,
+        coordinator: TNBDataCoordinator,
+        config_entry: ConfigEntry,
+        device_id: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._attr_name = f"{DEFAULT_NAME} Billing Start Day Status"
+        self._attr_unique_id = f"{config_entry.entry_id}_billing_start_day_status"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, config_entry.entry_id)},
+        }
+        self._device_id = device_id
+
+    @property
+    def native_value(self) -> Optional[str]:
+        """Return formatted billing start day string."""
+        data = self.coordinator.data or {}
+        active = data.get("billing_start_day_active")
+        pending = data.get("billing_start_day_pending")
+
+        if active is None:
+            return None
+
+        if pending is None:
+            return str(active)
+
+        return f"{active} (→ {pending} next cycle)"
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Expose billing start day metadata."""
+        data = self.coordinator.data or {}
+        attrs: Dict[str, Any] = {
+            "billing_start_day_active": data.get("billing_start_day_active"),
+            "billing_start_day_configured": data.get("billing_start_day_configured"),
+        }
+        pending = data.get("billing_start_day_pending")
+        if pending is not None:
+            attrs["billing_start_day_pending"] = pending
+            attrs["note"] = f"Will switch to {pending} next billing cycle"
         return attrs
