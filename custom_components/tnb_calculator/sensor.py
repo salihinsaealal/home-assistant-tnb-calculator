@@ -72,7 +72,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the TNB Calculator sensors."""
-    config = dict(config_entry.data)
+    config = {**config_entry.data, **config_entry.options}
     config["entry_id"] = config_entry.entry_id
 
     coordinator = TNBDataCoordinator(hass, config)
@@ -86,7 +86,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.7.13",
+        sw_version="3.7.15",
     )
 
     sensors = [
@@ -312,8 +312,11 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             self._validation_errors = []
             now = dt_util.now()
             
-            # Update API key and ToU status in case they were added/removed via reconfigure
+            # Update configuration in case options changed via reconfigure
+            self._import_entity = self.config.get(CONF_IMPORT_ENTITY, self._import_entity)
+            self._export_entity = self.config.get(CONF_EXPORT_ENTITY, self._export_entity)
             self._api_key = self.config.get(CONF_CALENDARIFIC_API_KEY)
+            self._billing_start_day = self.config.get(CONF_BILLING_START_DAY, self._billing_start_day)
             self._tou_enabled = bool(self._api_key)
 
             # Load stored data (force reload to pick up calibration changes)
@@ -417,6 +420,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                     # Weekday but outside peak hours (before 2PM or after 10PM)
                     period_status = "Off-Peak"
 
+            current_billing_day = self._monthly_data.get("billing_start_day", self._billing_start_day)
+            pending_billing_day = self._billing_start_day if self._billing_start_day != current_billing_day else None
+
             result: Dict[str, Any] = {
                 "import_energy": self._round_energy(monthly_import),
                 "export_energy": self._round_energy(monthly_export),
@@ -425,8 +431,11 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 "period_status": period_status,
                 "last_update": now.isoformat(),
                 "current_month": now.strftime("%Y-%m"),
-                "billing_start_day": self._billing_start_day,
-                "monthly_reset_day": self._billing_start_day,  # Deprecated, kept for compatibility
+                "billing_start_day": current_billing_day,
+                "billing_start_day_active": current_billing_day,
+                "billing_start_day_configured": self._billing_start_day,
+                "billing_start_day_pending": pending_billing_day,
+                "monthly_reset_day": current_billing_day,  # Deprecated, kept for compatibility
                 "is_holiday": is_holiday,
             }
 
@@ -681,11 +690,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             import_total, new_peak, new_offpeak, distribution
         )
         
-        # Save to storage
+        # Save and trigger immediate refresh
         await self._save_monthly_data()
-        
-        # Trigger immediate update without reloading from storage (data already in memory)
-        await self.async_request_refresh()
+        await self.async_refresh()
     
     async def async_adjust_import_energy_values(self, call) -> None:
         """Service to apply offset adjustments to import values with distribution options."""
@@ -771,11 +778,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             import_adj, peak_adj, offpeak_adj, distribution
         )
         
-        # Save to storage
+        # Save and trigger immediate refresh
         await self._save_monthly_data()
-        
-        # Trigger immediate update without reloading from storage (data already in memory)
-        await self.async_request_refresh()
+        await self.async_refresh()
     
     async def async_adjust_export_energy_values(self, call) -> None:
         """Service to apply offset adjustment to export value."""
@@ -804,11 +809,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             export_adj
         )
         
-        # Save to storage
+        # Save and trigger immediate refresh
         await self._save_monthly_data()
-        
-        # Trigger immediate update without reloading from storage (data already in memory)
-        await self.async_request_refresh()
+        await self.async_refresh()
     
     async def async_set_export_values(self, call) -> None:
         """Service to set exact export energy value."""
@@ -843,11 +846,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             export_total
         )
         
-        # Save to storage
+        # Save and trigger immediate refresh
         await self._save_monthly_data()
-        
-        # Trigger immediate update without reloading from storage (data already in memory)
-        await self.async_request_refresh()
+        await self.async_refresh()
 
     def _get_entity_state(self, entity_id: Optional[str], source: str) -> float:
         """Get numeric state from entity, return 0.0 if unavailable."""
@@ -1521,7 +1522,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "3.7.13",
+            "sw_version": "3.7.14",
         }
 
     @property
@@ -1573,7 +1574,14 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
         if self._sensor_type in ["total_cost_tou", "total_cost_non_tou", "import_energy", "export_energy", "net_energy"]:
             attrs["last_update"] = self.coordinator.data.get("last_update")
             attrs["current_month"] = self.coordinator.data.get("current_month")
-            attrs["billing_start_day"] = self.coordinator.data.get("billing_start_day")
+            attrs["billing_start_day"] = self.coordinator.data.get("billing_start_day_active")
+            attrs["billing_start_day_configured"] = self.coordinator.data.get("billing_start_day_configured")
+            pending_day = self.coordinator.data.get("billing_start_day_pending")
+            if pending_day is not None:
+                attrs["billing_start_day_pending"] = pending_day
+                attrs["billing_start_day_note"] = (
+                    f"New billing start day {pending_day} will activate next billing cycle"
+                )
         
         # Add ToU energy breakdown to relevant sensors
         if self._sensor_type in ["import_energy", "total_cost_tou"]:
@@ -1625,7 +1633,8 @@ class TNBBillingStartDayNumber(CoordinatorEntity, NumberEntity):
     @property
     def native_value(self) -> float:
         """Return the current billing start day."""
-        return self.coordinator._billing_start_day
+        data = self.coordinator.data or {}
+        return data.get("billing_start_day_active", self.coordinator._billing_start_day)
     
     async def async_set_native_value(self, value: float) -> None:
         """Update billing start day."""
@@ -1639,6 +1648,21 @@ class TNBBillingStartDayNumber(CoordinatorEntity, NumberEntity):
         
         # Update coordinator
         self.coordinator._billing_start_day = new_day
-        
+        self.coordinator.config[CONF_BILLING_START_DAY] = new_day
+
         # Trigger refresh
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_refresh()
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Expose pending billing start day information."""
+        data = self.coordinator.data or {}
+        attrs: Dict[str, Any] = {
+            "billing_start_day_active": data.get("billing_start_day_active", self.coordinator._billing_start_day),
+            "billing_start_day_configured": data.get("billing_start_day_configured", self.coordinator._billing_start_day),
+        }
+        pending_day = data.get("billing_start_day_pending")
+        if pending_day is not None:
+            attrs["billing_start_day_pending"] = pending_day
+            attrs["note"] = f"Will switch to {pending_day} next billing cycle"
+        return attrs
