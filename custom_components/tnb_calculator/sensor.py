@@ -86,7 +86,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.7.8",
+        sw_version="3.7.10",
     )
 
     sensors = [
@@ -164,9 +164,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         self._validation_errors: list[str] = []
         self._last_validation_status: str = "OK"
 
-    async def _load_monthly_data(self) -> None:
+    async def _load_monthly_data(self, force_reload: bool = False) -> None:
         """Load monthly data from storage."""
-        if self._monthly_data_loaded:
+        if self._monthly_data_loaded and not force_reload:
             return
             
         stored_data = await self._store.async_load()
@@ -312,8 +312,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             self._validation_errors = []
             now = dt_util.now()
 
-            # Load stored data on first run
-            await self._load_monthly_data()
+            # Load stored data (force reload to pick up calibration changes)
+            await self._load_monthly_data(force_reload=True)
 
             import_total = self._get_entity_state(self._import_entity, "Import entity")
             export_total = self._get_entity_state(self._export_entity, "Export entity")
@@ -1516,7 +1516,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "3.7.8",
+            "sw_version": "3.7.10",
         }
 
     @property
