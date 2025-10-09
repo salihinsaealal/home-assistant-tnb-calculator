@@ -86,7 +86,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.7.11",
+        sw_version="3.7.13",
     )
 
     sensors = [
@@ -312,7 +312,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             self._validation_errors = []
             now = dt_util.now()
             
-            # Update ToU status in case API key was added/removed via reconfigure
+            # Update API key and ToU status in case they were added/removed via reconfigure
+            self._api_key = self.config.get(CONF_CALENDARIFIC_API_KEY)
             self._tou_enabled = bool(self._api_key)
 
             # Load stored data (force reload to pick up calibration changes)
@@ -683,8 +684,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         # Save to storage
         await self._save_monthly_data()
         
-        # Force immediate refresh - this will reload storage and update all entities
-        await self.async_refresh()
+        # Trigger immediate update without reloading from storage (data already in memory)
+        await self.async_request_refresh()
     
     async def async_adjust_import_energy_values(self, call) -> None:
         """Service to apply offset adjustments to import values with distribution options."""
@@ -773,8 +774,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         # Save to storage
         await self._save_monthly_data()
         
-        # Force immediate refresh - this will reload storage and update all entities
-        await self.async_refresh()
+        # Trigger immediate update without reloading from storage (data already in memory)
+        await self.async_request_refresh()
     
     async def async_adjust_export_energy_values(self, call) -> None:
         """Service to apply offset adjustment to export value."""
@@ -806,8 +807,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         # Save to storage
         await self._save_monthly_data()
         
-        # Force immediate refresh - this will reload storage and update all entities
-        await self.async_refresh()
+        # Trigger immediate update without reloading from storage (data already in memory)
+        await self.async_request_refresh()
     
     async def async_set_export_values(self, call) -> None:
         """Service to set exact export energy value."""
@@ -845,8 +846,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         # Save to storage
         await self._save_monthly_data()
         
-        # Force immediate refresh - this will reload storage and update all entities
-        await self.async_refresh()
+        # Trigger immediate update without reloading from storage (data already in memory)
+        await self.async_request_refresh()
 
     def _get_entity_state(self, entity_id: Optional[str], source: str) -> float:
         """Get numeric state from entity, return 0.0 if unavailable."""
@@ -1520,7 +1521,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "3.7.11",
+            "sw_version": "3.7.13",
         }
 
     @property

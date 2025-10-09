@@ -76,7 +76,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 _LOGGER.warning("Import entity %s not found, will retry setup", import_entity)
                 raise ConfigEntryNotReady(f"Import entity {import_entity} not available yet")
 
-        config = dict(entry.data)
+        # Merge data and options (options override data)
+        config = {**entry.data, **entry.options}
         config["entry_id"] = entry.entry_id
 
         # Initialize coordinator and perform first refresh before forwarding platforms
@@ -91,6 +92,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Set up platforms
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        
+        # Register update listener for options changes
+        entry.async_on_unload(entry.add_update_listener(async_reload_entry))
         
         # Register services
         async def handle_compare_bill(call: ServiceCall) -> None:
@@ -249,6 +253,12 @@ Monthly Export: {coordinator.data.get('export_energy', 0):.2f} kWh
     except Exception as ex:
         _LOGGER.error("Error setting up TNB Calculator: %s", ex, exc_info=True)
         raise ConfigEntryNotReady(f"Failed to set up TNB Calculator: {ex}") from ex
+
+
+async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload config entry when options change."""
+    _LOGGER.info("Reloading TNB Calculator integration due to options change")
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
