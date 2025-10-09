@@ -42,6 +42,19 @@ SERVICE_SET_ENERGY_VALUES_SCHEMA = vol.Schema({
     vol.Optional("export_total"): cv.positive_float,
 })
 
+SERVICE_SET_EXPORT_VALUES_SCHEMA = vol.Schema({
+    vol.Required("export_total"): cv.positive_float,
+    vol.Optional("distribution", default="proportional"): vol.In([
+        "proportional", 
+        "peak_only", 
+        "offpeak_only", 
+        "auto",
+        "manual"
+    ]),
+    vol.Optional("export_peak"): cv.positive_float,
+    vol.Optional("export_offpeak"): cv.positive_float,
+})
+
 SERVICE_ADJUST_ENERGY_VALUES_SCHEMA = vol.Schema({
     vol.Optional("import_adjustment", default=0): vol.Coerce(float),
     vol.Optional("peak_adjustment", default=0): vol.Coerce(float),
@@ -193,6 +206,23 @@ Monthly Export: {coordinator.data.get('export_energy', 0):.2f} kWh
             "adjust_energy_values",
             handle_adjust_energy_values,
             schema=SERVICE_ADJUST_ENERGY_VALUES_SCHEMA,
+        )
+        
+        async def handle_set_export_values(call: ServiceCall) -> None:
+            """Handle setting exact export values."""
+            coordinator_data = hass.data[DOMAIN].get(entry.entry_id)
+            if not coordinator_data or "coordinator" not in coordinator_data:
+                _LOGGER.error("Could not find TNB Calculator coordinator for set_export_values")
+                return
+            
+            coordinator: TNBDataCoordinator = coordinator_data["coordinator"]
+            await coordinator.async_set_export_values(call)
+        
+        hass.services.async_register(
+            DOMAIN,
+            "set_export_values",
+            handle_set_export_values,
+            schema=SERVICE_SET_EXPORT_VALUES_SCHEMA,
         )
 
         return True

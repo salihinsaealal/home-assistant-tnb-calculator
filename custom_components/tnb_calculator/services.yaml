@@ -127,6 +127,72 @@ set_energy_values:
           mode: box
           unit_of_measurement: "kWh"
 
+set_export_values:
+  name: Set Export Values
+  description: |
+    Set exact export energy values for calibration. Choose how to distribute the change between peak and off-peak.
+    
+    Examples:
+    • Proportional: export_total: 250, distribution: "proportional"
+    • Peak only: export_total: 250, distribution: "peak_only"
+    • Manual: export_total: 250, distribution: "manual", export_peak: 100, export_offpeak: 150
+  fields:
+    export_total:
+      name: Export Total (kWh)
+      description: Target export energy value in kWh
+      required: true
+      example: 250.0
+      selector:
+        number:
+          min: 0
+          max: 100000
+          step: 0.1
+          mode: box
+          unit_of_measurement: "kWh"
+    distribution:
+      name: Distribution Method
+      description: How to distribute the change between peak and off-peak
+      required: false
+      default: "proportional"
+      example: "proportional"
+      selector:
+        select:
+          options:
+            - label: "Proportional (maintain current ratio)"
+              value: "proportional"
+            - label: "Peak Only (change affects peak only)"
+              value: "peak_only"
+            - label: "Off-Peak Only (change affects off-peak only)"
+              value: "offpeak_only"
+            - label: "Auto (detect based on current time)"
+              value: "auto"
+            - label: "Manual (specify exact peak/off-peak)"
+              value: "manual"
+    export_peak:
+      name: Export Peak (kWh)
+      description: Exact peak export value (required if distribution is 'manual')
+      required: false
+      example: 100.0
+      selector:
+        number:
+          min: 0
+          max: 100000
+          step: 0.1
+          mode: box
+          unit_of_measurement: "kWh"
+    export_offpeak:
+      name: Export Off-Peak (kWh)
+      description: Exact off-peak export value (required if distribution is 'manual')
+      required: false
+      example: 150.0
+      selector:
+        number:
+          min: 0
+          max: 100000
+          step: 0.1
+          mode: box
+          unit_of_measurement: "kWh"
+
 adjust_energy_values:
   name: Adjust Energy Values
   description: |

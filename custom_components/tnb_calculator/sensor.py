@@ -86,7 +86,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.7.4",
+        sw_version="3.7.5",
     )
 
     sensors = [
@@ -572,6 +572,13 @@ class TNBDataCoordinator(DataUpdateCoordinator):
     
     async def async_set_energy_values(self, call) -> None:
         """Service to set exact energy values with distribution options."""
+        # Ensure monthly data is loaded
+        await self._load_monthly_data()
+        
+        if not hasattr(self, "_monthly_data") or not self._monthly_data:
+            _LOGGER.error("Monthly data not available. Cannot set energy values.")
+            raise ValueError("Monthly data not initialized. Please wait for integration to fully load.")
+        
         import_total = call.data["import_total"]
         distribution = call.data.get("distribution", "proportional")
         export_total = call.data.get("export_total")
@@ -608,7 +615,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         elif distribution == "auto":
             # Auto-detect based on current time
             now = dt_util.now()
-            is_holiday = self._is_holiday(now)
+            is_holiday = await self._is_holiday(now)
             is_peak = self._is_peak_period(now, is_holiday)
             
             if is_peak:
@@ -683,6 +690,13 @@ class TNBDataCoordinator(DataUpdateCoordinator):
     
     async def async_adjust_energy_values(self, call) -> None:
         """Service to apply offset adjustments to current values."""
+        # Ensure monthly data is loaded
+        await self._load_monthly_data()
+        
+        if not hasattr(self, "_monthly_data") or not self._monthly_data:
+            _LOGGER.error("Monthly data not available. Cannot adjust energy values.")
+            raise ValueError("Monthly data not initialized. Please wait for integration to fully load.")
+        
         import_adj = call.data.get("import_adjustment", 0)
         peak_adj = call.data.get("peak_adjustment", 0)
         offpeak_adj = call.data.get("offpeak_adjustment", 0)
@@ -719,6 +733,116 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         _LOGGER.info(
             "Energy adjustment applied: Import %+.2f kWh (Peak: %+.2f, Off-peak: %+.2f, Export: %+.2f)",
             import_adj, peak_adj, offpeak_adj, export_adj
+        )
+        
+        # Save and refresh
+        await self._save_monthly_data()
+        await self.async_request_refresh()
+    
+    async def async_set_export_values(self, call) -> None:
+        """Service to set exact export energy values with distribution options."""
+        # Ensure monthly data is loaded
+        await self._load_monthly_data()
+        
+        if not hasattr(self, "_monthly_data") or not self._monthly_data:
+            _LOGGER.error("Monthly data not available. Cannot set export values.")
+            raise ValueError("Monthly data not initialized. Please wait for integration to fully load.")
+        
+        export_total = call.data["export_total"]
+        distribution = call.data.get("distribution", "proportional")
+        
+        # Get current values (export peak/offpeak tracking if ToU enabled)
+        current_export = self._monthly_data.get("export_total", 0)
+        current_export_peak = self._monthly_data.get("export_peak", 0)
+        current_export_offpeak = self._monthly_data.get("export_offpeak", 0)
+        
+        # Calculate difference
+        export_diff = export_total - current_export
+        
+        # Distribute based on option
+        if distribution == "proportional":
+            # Maintain current ratio
+            if current_export > 0:
+                peak_ratio = current_export_peak / current_export
+            else:
+                peak_ratio = 0.6  # Default 60% peak
+            
+            new_export_peak = export_total * peak_ratio
+            new_export_offpeak = export_total * (1 - peak_ratio)
+        
+        elif distribution == "peak_only":
+            # Add difference to peak only
+            new_export_peak = current_export_peak + export_diff
+            new_export_offpeak = current_export_offpeak
+        
+        elif distribution == "offpeak_only":
+            # Add difference to off-peak only
+            new_export_peak = current_export_peak
+            new_export_offpeak = current_export_offpeak + export_diff
+        
+        elif distribution == "auto":
+            # Auto-detect based on current time
+            now = dt_util.now()
+            is_holiday = await self._is_holiday(now)
+            is_peak = self._is_peak_period(now, is_holiday)
+            
+            if is_peak:
+                # Currently peak time - assume adjustment is peak-related
+                new_export_peak = current_export_peak + export_diff
+                new_export_offpeak = current_export_offpeak
+                _LOGGER.info("Auto-distribution: Applied to export peak (current time is peak period)")
+            else:
+                # Currently off-peak - assume adjustment is off-peak-related
+                new_export_peak = current_export_peak
+                new_export_offpeak = current_export_offpeak + export_diff
+                _LOGGER.info("Auto-distribution: Applied to export off-peak (current time is off-peak period)")
+        
+        elif distribution == "manual":
+            # User provides exact values
+            new_export_peak = call.data.get("export_peak")
+            new_export_offpeak = call.data.get("export_offpeak")
+            
+            if new_export_peak is None or new_export_offpeak is None:
+                raise ValueError("export_peak and export_offpeak required when distribution='manual'")
+            
+            # Validate sum
+            if abs((new_export_peak + new_export_offpeak) - export_total) > 0.01:
+                raise ValueError(f"Export Peak ({new_export_peak}) + Off-peak ({new_export_offpeak}) must equal Export Total ({export_total})")
+        
+        else:
+            raise ValueError(f"Invalid distribution option: {distribution}")
+        
+        # Validate non-negative
+        if new_export_peak < 0 or new_export_offpeak < 0:
+            raise ValueError("Export peak and off-peak values cannot be negative")
+        
+        # Get sensor readings for baseline calculation
+        sensor_export = self._get_entity_state(self._export_entity, "Export")
+        
+        # Calculate baselines (offset from sensor)
+        export_baseline = export_total - sensor_export
+        export_peak_baseline = new_export_peak - current_export_peak
+        export_offpeak_baseline = new_export_offpeak - current_export_offpeak
+        
+        # Store calibration
+        if "calibration" not in self._monthly_data:
+            self._monthly_data["calibration"] = {}
+        
+        self._monthly_data["calibration"]["export_baseline"] = export_baseline
+        self._monthly_data["calibration"]["export_peak_baseline"] = export_peak_baseline
+        self._monthly_data["calibration"]["export_offpeak_baseline"] = export_offpeak_baseline
+        self._monthly_data["calibration"]["last_calibrated"] = dt_util.now().isoformat()
+        self._monthly_data["calibration"]["export_distribution_method"] = distribution
+        
+        # Update values
+        self._monthly_data["export_total"] = export_total
+        self._monthly_data["export_peak"] = new_export_peak
+        self._monthly_data["export_offpeak"] = new_export_offpeak
+        
+        # Log calibration
+        _LOGGER.info(
+            "Export calibration applied: Export %.2f kWh (Peak: %.2f, Off-peak: %.2f) using '%s' distribution",
+            export_total, new_export_peak, new_export_offpeak, distribution
         )
         
         # Save and refresh
@@ -1397,7 +1521,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "3.7.4",
+            "sw_version": "3.7.5",
         }
 
     @property
