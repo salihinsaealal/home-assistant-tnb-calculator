@@ -58,10 +58,6 @@ set_energy_values:
     • Proportional: import_total: 1500, distribution: "proportional"
     • Peak only: import_total: 1500, distribution: "peak_only"
     • Manual: import_total: 1500, distribution: "manual", import_peak: 650, import_offpeak: 850
-  target:
-  example:
-    import_total: 1500.5
-    distribution: "proportional"
   fields:
     import_total:
       name: Import Total (kWh)
@@ -140,11 +136,6 @@ adjust_energy_values:
     • Add 20 kWh to import: import_adjustment: 20
     • Subtract 5 kWh from export: export_adjustment: -5
     • Adjust peak/offpeak: peak_adjustment: 10, offpeak_adjustment: 10
-  target:
-  example:
-    import_adjustment: 20.5
-    peak_adjustment: 10.0
-    offpeak_adjustment: 10.5
   fields:
     import_adjustment:
       name: Import Adjustment (kWh)

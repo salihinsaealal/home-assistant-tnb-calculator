@@ -18,15 +18,17 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v3.7.3b1 (Beta)
+## ⭐ What's New in v3.7.3e
 
-- **⚙️ Optional Inputs Fixed**: Config flow now accepts blank export sensors and Calendarific API keys without blocking setup.
-- **📊 Improved Predictions**: Switched to direct cost averaging for more accurate monthly forecasts. No more inflated predictions on early days.
-- **🔍 New Diagnostic Sensors**: 
-  - `Prediction Method` - Shows which prediction algorithm is active (Cost Trend or Hybrid)
-  - `Configuration Scenario` - Displays your setup type (Import Only, Import+Export, ToU, Non-ToU)
-- **🧼 Reset & Dashboard (Carry-over)**: Reset service refinements and Bubble dashboard template remain included.
-- **✅ Beta Tag**: Marked as beta for broader testing before stable release.
+- **📅 Custom Billing Start Day**: Set your TNB billing cycle start date (1-31) to match your actual bill period
+- **🔧 Energy Calibration Services**: 
+  - `set_energy_values` - Set exact energy values with 5 distribution options (proportional, peak_only, offpeak_only, auto, manual)
+  - `adjust_energy_values` - Apply offset adjustments to current values
+- **💡 Import Rate Sensors**: Non-ToU users now see their import rates (generation, capacity, network, ICT)
+- **🎯 ToU Cost Fix**: Shows "unavailable" for non-ToU users instead of misleading estimates
+- **📊 Improved Predictions**: Direct cost averaging for accurate forecasts (no more inflated early-month predictions)
+- **🔍 Diagnostic Sensors**: `Prediction Method` and `Configuration Scenario` for better visibility
+- **🎨 Service UI**: Full UI support with dropdowns and examples in Developer Tools
 
 
 ## Features
