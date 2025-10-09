@@ -18,7 +18,7 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v3.7.3e1
+## ⭐ What's New in v3.7.4
 
 - **📅 Custom Billing Start Day**: Set your TNB billing cycle start date (1-31) to match your actual bill period
 - **🔧 Energy Calibration Services**: 
