@@ -686,7 +686,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         
         # Save and refresh
         await self._save_monthly_data()
-        await self.async_request_refresh()
+        await self.async_refresh()
     
     async def async_adjust_import_energy_values(self, call) -> None:
         """Service to apply offset adjustments to import values with distribution options."""
@@ -774,7 +774,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         
         # Save and refresh
         await self._save_monthly_data()
-        await self.async_request_refresh()
+        await self.async_refresh()
     
     async def async_adjust_export_energy_values(self, call) -> None:
         """Service to apply offset adjustment to export value."""
@@ -805,7 +805,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         
         # Save and refresh
         await self._save_monthly_data()
-        await self.async_request_refresh()
+        await self.async_refresh()
     
     async def async_set_export_values(self, call) -> None:
         """Service to set exact export energy value."""
@@ -842,7 +842,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         
         # Save and refresh
         await self._save_monthly_data()
-        await self.async_request_refresh()
+        await self.async_refresh()
 
     def _get_entity_state(self, entity_id: Optional[str], source: str) -> float:
         """Get numeric state from entity, return 0.0 if unavailable."""
