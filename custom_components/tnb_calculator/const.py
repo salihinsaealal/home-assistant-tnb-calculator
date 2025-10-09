@@ -21,7 +21,7 @@ CONF_CALENDARIFIC_API_KEY = "calendarific_api_key"
 CONF_COUNTRY = "country"
 CONF_YEAR = "year"
 CONF_BILLING_START_DAY = "billing_start_day"
-CONF_VERSION = "4.0.0"
+CONF_VERSION = "4.0.1"
 
 # Base sensor types (always exposed) - ordered by priority
 BASE_SENSOR_TYPES = {

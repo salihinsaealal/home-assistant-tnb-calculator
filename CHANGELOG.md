@@ -2,6 +2,13 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [4.0.1] - 2025-10-09
+
+### Fixed
+- **Service UI Default**: `adjust_import_energy_values` distribution now correctly defaults to "Auto" instead of "Proportional"
+
+---
+
 ## [4.0.0] - 2025-10-09
 
 ### 🎉 Major Release - Configuration & Calibration Overhaul
