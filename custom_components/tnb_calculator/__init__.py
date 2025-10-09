@@ -30,7 +30,7 @@ SERVICE_RESET_STORAGE_SCHEMA = vol.Schema({
 
 SERVICE_SET_IMPORT_ENERGY_VALUES_SCHEMA = vol.Schema({
     vol.Required("import_total"): cv.positive_float,
-    vol.Optional("distribution", default="proportional"): vol.In([
+    vol.Optional("distribution", default="auto"): vol.In([
         "auto",
         "peak_only", 
         "offpeak_only", 
@@ -47,7 +47,7 @@ SERVICE_SET_EXPORT_ENERGY_VALUES_SCHEMA = vol.Schema({
 
 SERVICE_ADJUST_IMPORT_ENERGY_VALUES_SCHEMA = vol.Schema({
     vol.Required("import_adjustment"): vol.Coerce(float),
-    vol.Optional("distribution", default="proportional"): vol.In([
+    vol.Optional("distribution", default="auto"): vol.In([
         "auto",
         "peak_only", 
         "offpeak_only", 

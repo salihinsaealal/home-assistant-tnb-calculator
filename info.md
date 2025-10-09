@@ -22,15 +22,15 @@ A Home Assistant integration to calculate your TNB (Tenaga Nasional Berhad) elec
 - **Smart Meter Reset Handling**: Automatically detects and handles daily/monthly meter resets
 - **Verified Accuracy**: Calculations match TNB tariff templates exactly for both ToU and non-ToU
 
-## What's New in v3.7.6
+## What's New in v4.0.0
 
-- **📅 Custom Billing Start Day**: Set your TNB billing cycle start date (1-31) to match your actual bill period
-- **🔧 Energy Calibration Services**: Set exact values or apply adjustments with 5 distribution options
-- **💡 Import Rate Sensors**: Non-ToU users now see their import rates (generation, capacity, network, ICT)
-- **🎯 ToU Cost Fix**: Shows "unavailable" for non-ToU users instead of misleading estimates
-- **📊 Improved Predictions**: Direct cost averaging for accurate forecasts
-- **🔍 Diagnostic Sensors**: `Prediction Method` and `Configuration Scenario`
-- **🎨 Service UI**: Full UI support with dropdowns and examples
+### 🎉 Major Release - Configuration & Calibration Overhaul
+
+- **🔄 Dynamic Configuration Updates**: API key and billing start day changes apply instantly without deleting/re-adding integration
+- **📅 Billing Start Day Status**: New sensor shows `"1 (→ 4 next cycle)"` when changes are pending
+- **⚡ Improved Calibration Services**: Distribution options reordered with **Auto** as default, clearer delay information
+- **🔧 Service Fixes**: All calibration services now work correctly with proper refresh handling
+- **📊 Better UX**: Pending configuration changes visible in sensor attributes and status displays
 
 ### Dashboard Usage
 1. Install Bubble Card and ApexCharts Card (through HACS or manual resources) and add them under *Settings → Dashboards → Resources*.

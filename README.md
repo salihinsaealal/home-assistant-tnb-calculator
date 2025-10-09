@@ -18,17 +18,20 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v3.7.6
+## ⭐ What's New in v4.0.0
 
-- **📅 Custom Billing Start Day**: Set your TNB billing cycle start date (1-31) to match your actual bill period
-- **🔧 Energy Calibration Services**: 
-  - `set_energy_values` - Set exact energy values with 5 distribution options (proportional, peak_only, offpeak_only, auto, manual)
-  - `adjust_energy_values` - Apply offset adjustments to current values
-- **💡 Import Rate Sensors**: Non-ToU users now see their import rates (generation, capacity, network, ICT)
-- **🎯 ToU Cost Fix**: Shows "unavailable" for non-ToU users instead of misleading estimates
-- **📊 Improved Predictions**: Direct cost averaging for accurate forecasts (no more inflated early-month predictions)
-- **🔍 Diagnostic Sensors**: `Prediction Method` and `Configuration Scenario` for better visibility
-- **🎨 Service UI**: Full UI support with dropdowns and examples in Developer Tools
+### 🎉 Major Release - Configuration & Calibration Overhaul
+
+- **🔄 Dynamic Configuration Updates**: API key and billing start day changes apply instantly without deleting/re-adding integration
+  - Add Calendarific API key via Configure → ToU mode activates immediately
+  - Change billing start day → updates at next cycle with clear pending indicator
+- **📅 Billing Start Day Status**: New sensor shows `"1 (→ 4 next cycle)"` when changes are pending
+- **⚡ Improved Calibration Services**: 
+  - Distribution options reordered: **Auto** (default) → Peak → Off-Peak → Proportional → Manual
+  - Clear delay information: "Values update immediately in storage but sensor display has a delay"
+  - Simplified UI with cleaner descriptions
+- **🔧 Service Fixes**: All calibration services now work correctly with proper refresh handling
+- **📊 Better UX**: Pending configuration changes visible in sensor attributes and status displays
 
 
 ## Features
@@ -41,7 +44,9 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 - **Smart Meter Reset Handling**: Automatically detects and handles daily/monthly meter resets
 - **Verified Accuracy**: Calculations match TNB tariff templates exactly for both ToU and non-ToU
 
-## Bill Comparison Service
+## Services
+
+### Bill Comparison
 
 Compare the calculated bill with your actual TNB invoice and receive a persistent notification summarizing the difference.
 
@@ -54,6 +59,57 @@ data:
 ```
 - The integration logs the comparison and posts a notification showing the calculated cost, actual bill, absolute difference, and percentage variance.
 - If the difference exceeds ±5%, the notification highlights it so you can investigate.
+
+### Energy Calibration Services
+
+Fine-tune your energy readings to match your actual TNB meter or bill.
+
+#### Set Import Energy Values
+Set exact import energy values for calibration:
+
+```yaml
+service: tnb_calculator.set_import_energy_values
+data:
+  import_total: 1500.5  # Target total import in kWh
+  distribution: "auto"  # How to split between peak/off-peak
+```
+
+**Distribution Options:**
+- **Auto** (default): Detects based on current time
+- **Peak Only**: Change affects peak period only
+- **Off-Peak Only**: Change affects off-peak period only
+- **Proportional**: Split by current peak/off-peak ratio
+- **Manual**: Specify exact peak/off-peak values
+
+#### Adjust Import Energy Values
+Apply offset adjustments (add/subtract) to current values:
+
+```yaml
+service: tnb_calculator.adjust_import_energy_values
+data:
+  import_adjustment: 20.5  # Amount to add (+) or subtract (-)
+  distribution: "auto"
+```
+
+#### Set/Adjust Export Energy Values
+Similar services available for export energy (solar users):
+- `tnb_calculator.set_export_energy_values`
+- `tnb_calculator.adjust_export_energy_values`
+
+**⏱️ Note on Calibration Delays:**
+- Values update **immediately in storage**
+- Sensor display updates on next coordinator refresh (~5 minutes)
+- For **instant sensor refresh**, reload the integration via Settings → Devices & Services → TNB Calculator → Reload
+
+### Reset Storage
+
+Clear all cached data (energy totals, historical months, holidays):
+
+```yaml
+service: tnb_calculator.reset_storage
+data:
+  confirm: "RESET"  # Type exactly "RESET" to confirm
+```
 
 ## Installation
 
@@ -153,10 +209,12 @@ After setup, these sensors will be created:
 
 ## How It Works
 
-### Monthly Calculation
-- The integration tracks your energy usage from the 1st of each month
-- Calculations reset automatically on the 1st of every month
-- This matches TNB's billing cycle
+### Monthly Calculation & Custom Billing Cycles
+- **Custom Billing Start Day**: Set your TNB billing cycle start date (1-31) via the Billing Start Day number entity
+  - Changes take effect at the next billing cycle boundary
+  - Pending changes shown in `sensor.tnb_calculator_billing_start_day_status` (e.g., `"1 (→ 4 next cycle)"`)
+  - Attributes expose `billing_start_day_active`, `billing_start_day_configured`, and `billing_start_day_pending`
+- Calculations reset automatically based on your configured billing start day
 - Peak/off-peak splitting is handled automatically by the integration based on time and holidays
 
 ### Cost Calculation

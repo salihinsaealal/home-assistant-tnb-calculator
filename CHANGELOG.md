@@ -2,6 +2,56 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [4.0.0] - 2025-10-09
+
+### 🎉 Major Release - Configuration & Calibration Overhaul
+
+This major version brings significant improvements to configuration management, calibration workflows, and billing cycle customization.
+
+### Added
+- **🔄 Dynamic Configuration Updates**: API key and billing start day changes now apply immediately without requiring integration deletion/re-add
+  - Options flow properly merges with config entry data
+  - Coordinator refreshes configuration on every update cycle
+  - ToU mode activates instantly when API key is added via reconfigure
+- **📅 Billing Start Day Status Sensor**: New `sensor.tnb_calculator_billing_start_day_status` displays active billing day with pending changes
+  - Shows format: `"1 (→ 4 next cycle)"` when a change is staged
+  - Exposes `billing_start_day_active`, `billing_start_day_configured`, and `billing_start_day_pending` attributes
+  - Pending changes activate at the next billing cycle boundary
+- **⚡ Improved Calibration Services**: Enhanced user experience for energy value adjustments
+  - Distribution options reordered: Auto → Peak Only → Off-Peak Only → Proportional → Manual
+  - Default distribution changed to "Auto" (detects based on current time)
+  - Simplified service descriptions with clear delay information
+  - All services now use `async_refresh()` for consistency
+
+### Improved
+- **🔧 Service Registration**: Fixed `async_request_refresh()` → `async_refresh()` in reset_storage service
+- **📊 Calibration Workflow**: 
+  - Values save to storage immediately
+  - Sensor display updates on next coordinator refresh (~5 minutes)
+  - Users informed: "Values update immediately in storage but sensor display has a delay. For instant sensor refresh, reload the integration."
+- **🎯 Configuration Persistence**: Billing start day and API key changes persist across integration reloads
+- **📝 Service UI Polish**: 
+  - Cleaner field descriptions
+  - "Proportional" now labeled as "split by current peak/off-peak ratio"
+  - Removed verbose examples from descriptions
+
+### Fixed
+- **🐛 Service UI Not Showing**: Corrected method call preventing service registration from completing
+- **🔄 ToU Mode Not Updating**: Fixed coordinator not detecting API key additions after initial setup
+- **📅 Billing Day Visibility**: Pending billing start day changes now surface in both number entity attributes and dedicated status sensor
+
+### Technical Changes
+- Merged `entry.data` and `entry.options` in `async_setup_entry()` for unified configuration
+- Added `async_reload_entry()` update listener for automatic reload on options changes
+- Coordinator now updates `_import_entity`, `_export_entity`, `_api_key`, and `_billing_start_day` on every refresh
+- Billing number entity displays active day while exposing configured/pending values in attributes
+- New `TNBBillingStartDayStatusSensor` class for formatted billing day status display
+
+### Breaking Changes
+- None - All changes are backward compatible
+
+---
+
 ## [3.7.3b1] - 2025-10-07 (Beta)
 
 ### Added

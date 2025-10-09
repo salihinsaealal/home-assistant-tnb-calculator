@@ -72,7 +72,7 @@ set_import_energy_values:
       name: Distribution Method
       description: "🔀 How to distribute between peak and off-peak periods."
       required: false
-      default: "proportional"
+      default: "auto"
       example: "auto"
       selector:
         select:
