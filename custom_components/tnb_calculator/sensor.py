@@ -86,7 +86,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="3.7.10",
+        sw_version="3.7.11",
     )
 
     sensors = [
@@ -581,7 +581,6 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         
         import_total = call.data["import_total"]
         distribution = call.data.get("distribution", "proportional")
-        export_total = call.data.get("export_total")
         
         # Get current values
         current_import = self._monthly_data.get("import_total", 0)
@@ -650,7 +649,6 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         
         # Get sensor readings for baseline calculation
         sensor_import = self._get_entity_state(self._import_entity, "Import")
-        sensor_export = self._get_entity_state(self._export_entity, "Export")
         
         # Calculate baselines (offset from sensor)
         import_baseline = import_total - sensor_import
@@ -672,21 +670,18 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         self._monthly_data["import_peak"] = new_peak
         self._monthly_data["import_offpeak"] = new_offpeak
         
-        # Export calibration
-        if export_total is not None:
-            export_baseline = export_total - sensor_export
-            self._monthly_data["calibration"]["export_baseline"] = export_baseline
-            self._monthly_data["export_total"] = export_total
-        
         # Log calibration
         _LOGGER.info(
             "Energy calibration applied: Import %.2f kWh (Peak: %.2f, Off-peak: %.2f) using '%s' distribution",
             import_total, new_peak, new_offpeak, distribution
         )
         
-        # Save and refresh
+        # Save and refresh immediately
         await self._save_monthly_data()
         await self.async_refresh()
+        
+        # Force immediate entity state update
+        self.async_update_listeners()
     
     async def async_adjust_import_energy_values(self, call) -> None:
         """Service to apply offset adjustments to import values with distribution options."""
@@ -772,9 +767,12 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             import_adj, peak_adj, offpeak_adj, distribution
         )
         
-        # Save and refresh
+        # Save and refresh immediately
         await self._save_monthly_data()
         await self.async_refresh()
+        
+        # Force immediate entity state update
+        self.async_update_listeners()
     
     async def async_adjust_export_energy_values(self, call) -> None:
         """Service to apply offset adjustment to export value."""
@@ -803,9 +801,12 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             export_adj
         )
         
-        # Save and refresh
+        # Save and refresh immediately
         await self._save_monthly_data()
         await self.async_refresh()
+        
+        # Force immediate entity state update
+        self.async_update_listeners()
     
     async def async_set_export_values(self, call) -> None:
         """Service to set exact export energy value."""
@@ -840,9 +841,12 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             export_total
         )
         
-        # Save and refresh
+        # Save and refresh immediately
         await self._save_monthly_data()
         await self.async_refresh()
+        
+        # Force immediate entity state update
+        self.async_update_listeners()
 
     def _get_entity_state(self, entity_id: Optional[str], source: str) -> float:
         """Get numeric state from entity, return 0.0 if unavailable."""
@@ -1516,7 +1520,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "3.7.10",
+            "sw_version": "3.7.11",
         }
 
     @property
