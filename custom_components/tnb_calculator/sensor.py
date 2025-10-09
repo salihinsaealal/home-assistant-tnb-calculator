@@ -1520,6 +1520,11 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
         }
 
     @property
+    def native_unit_of_measurement(self) -> Optional[str]:
+        """Return the unit of measurement."""
+        return self._attr_unit_of_measurement
+
+    @property
     def state(self) -> Any:
         """Return the state of the sensor."""
         if self.coordinator.data is None:
@@ -1531,14 +1536,8 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
         """Return extra state attributes."""
         if self.coordinator.data is None:
             return {}
-        attrs: Dict[str, Any] = {
-            "last_update": self.coordinator.data.get("last_update"),
-            "is_holiday": self.coordinator.data.get("is_holiday"),
-            "current_month": self.coordinator.data.get("current_month"),
-            "monthly_reset_day": self.coordinator.data.get("monthly_reset_day"),
-            "cached_holidays": self.coordinator.data.get("cached_holidays"),
-            "cached_holidays_last_fetch": self.coordinator.data.get("cached_holidays_last_fetch"),
-        }
+        
+        attrs: Dict[str, Any] = {}
         
         # Add prediction method details as attributes
         if self._sensor_type == "prediction_method":
@@ -1559,15 +1558,29 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             scenario_details = self.coordinator.data.get("configuration_scenario_details", {})
             attrs.update(scenario_details)
             return attrs
-
-        for key in [
-            "import_peak_energy",
-            "import_offpeak_energy",
-            "export_total_energy",
-        ]:
-            value = self.coordinator.data.get(key)
+        
+        # Add holiday cache info only to diagnostic sensors
+        if self._sensor_type in ["cached_holidays_count", "storage_health"]:
+            attrs["cached_holidays"] = self.coordinator.data.get("cached_holidays")
+            attrs["cached_holidays_last_fetch"] = self.coordinator.data.get("cached_holidays_last_fetch")
+        
+        # Add common attributes only to main sensors (costs and energy)
+        if self._sensor_type in ["total_cost_tou", "total_cost_non_tou", "import_energy", "export_energy", "net_energy"]:
+            attrs["last_update"] = self.coordinator.data.get("last_update")
+            attrs["current_month"] = self.coordinator.data.get("current_month")
+            attrs["billing_start_day"] = self.coordinator.data.get("billing_start_day")
+        
+        # Add ToU energy breakdown to relevant sensors
+        if self._sensor_type in ["import_energy", "total_cost_tou"]:
+            for key in ["import_peak_energy", "import_offpeak_energy"]:
+                value = self.coordinator.data.get(key)
+                if value is not None:
+                    attrs[key] = value
+        
+        if self._sensor_type in ["export_energy", "total_cost_tou"]:
+            value = self.coordinator.data.get("export_total_energy")
             if value is not None:
-                attrs[key] = value
+                attrs["export_total_energy"] = value
 
         return attrs
 
