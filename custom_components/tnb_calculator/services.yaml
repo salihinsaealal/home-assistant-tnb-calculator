@@ -94,7 +94,6 @@ set_import_energy_values:
       name: "⚡ Import Peak (kWh)"
       description: "⚠️ ONLY for 'manual' mode: Exact peak import value. Peak + Off-peak must equal Import Total."
       required: false
-      advanced: true
       example: 650.0
       selector:
         number:
@@ -107,7 +106,6 @@ set_import_energy_values:
       name: "🌙 Import Off-Peak (kWh)"
       description: "⚠️ ONLY for 'manual' mode: Exact off-peak import value. Peak + Off-peak must equal Import Total."
       required: false
-      advanced: true
       example: 850.5
       selector:
         number:
@@ -120,7 +118,6 @@ set_import_energy_values:
       name: Export Total (kWh)
       description: Target export energy value in kWh (optional)
       required: false
-      advanced: true
       example: 250.0
       selector:
         number:
@@ -195,7 +192,6 @@ adjust_import_energy_values:
       name: "⚡ Peak Adjustment (kWh)"
       description: "⚠️ ONLY for 'manual' mode: Exact peak adjustment. Peak + Off-peak must equal Import Adjustment."
       required: false
-      advanced: true
       example: 10.0
       selector:
         number:
@@ -208,7 +204,6 @@ adjust_import_energy_values:
       name: "🌙 Off-Peak Adjustment (kWh)"
       description: "⚠️ ONLY for 'manual' mode: Exact off-peak adjustment. Peak + Off-peak must equal Import Adjustment."
       required: false
-      advanced: true
       example: 10.5
       selector:
         number:
