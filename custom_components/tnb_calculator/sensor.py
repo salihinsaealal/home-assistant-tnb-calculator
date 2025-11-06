@@ -86,7 +86,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="4.0.1",
+        sw_version="4.0.2",
     )
 
     sensors = [
@@ -329,8 +329,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             # Load stored data (force reload to pick up calibration changes)
             await self._load_monthly_data(force_reload=True)
 
-            import_total = self._get_entity_state(self._import_entity, "Import entity")
-            export_total = self._get_entity_state(self._export_entity, "Export entity")
+            import_total = self._get_entity_state(self._import_entity, "Import entity", is_optional=False)
+            export_total = self._get_entity_state(self._export_entity, "Export entity", is_optional=True)
 
             if not hasattr(self, "_monthly_data") or self._month_changed(now):
                 self._monthly_data = self._create_month_bucket(now)
@@ -669,7 +669,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             raise ValueError("Peak and off-peak values cannot be negative")
         
         # Get sensor readings for baseline calculation
-        sensor_import = self._get_entity_state(self._import_entity, "Import")
+        sensor_import = self._get_entity_state(self._import_entity, "Import", is_optional=False)
         
         # Calculate baselines (offset from sensor)
         import_baseline = import_total - sensor_import
@@ -832,7 +832,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         export_total = call.data["export_total"]
         
         # Get sensor reading for baseline calculation
-        sensor_export = self._get_entity_state(self._export_entity, "Export")
+        sensor_export = self._get_entity_state(self._export_entity, "Export", is_optional=True)
         
         # Calculate baseline (offset from sensor)
         export_baseline = export_total - sensor_export
@@ -857,25 +857,36 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         await self._save_monthly_data()
         await self.async_refresh()
 
-    def _get_entity_state(self, entity_id: Optional[str], source: str) -> float:
-        """Get numeric state from entity, return 0.0 if unavailable."""
+    def _get_entity_state(self, entity_id: Optional[str], source: str, is_optional: bool = False) -> float:
+        """Get numeric state from entity, return 0.0 if unavailable.
+        
+        Args:
+            entity_id: Entity ID to read
+            source: Source name for logging (e.g., "Import entity", "Export entity")
+            is_optional: If True, don't log validation errors for missing/unconfigured entities
+                        (still return 0.0 gracefully). Errors are still recorded for diagnostics.
+        """
         if not entity_id:
-            self._add_validation_error(source, "entity not configured")
+            if not is_optional:
+                self._add_validation_error(source, "entity not configured")
             return 0.0
 
         state = self.hass.states.get(entity_id)
         if state is None:
-            self._add_validation_error(source, f"entity '{entity_id}' not found")
+            if not is_optional:
+                self._add_validation_error(source, f"entity '{entity_id}' not found")
             return 0.0
 
         if state.state in ["unknown", "unavailable"]:
-            self._add_validation_error(source, f"entity '{entity_id}' state is {state.state}")
+            if not is_optional:
+                self._add_validation_error(source, f"entity '{entity_id}' state is {state.state}")
             return 0.0
 
         try:
             return float(state.state)
         except (ValueError, TypeError):
-            self._add_validation_error(source, f"entity '{entity_id}' reported non-numeric state '{state.state}'")
+            if not is_optional:
+                self._add_validation_error(source, f"entity '{entity_id}' reported non-numeric state '{state.state}'")
             return 0.0
 
     def _get_billing_period(self, dt: datetime) -> tuple[int, int]:
@@ -956,8 +967,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             "export_total": 0.0,
             "import_peak": 0.0,
             "import_offpeak": 0.0,
-            "import_last": self._get_entity_state(self._import_entity, "Import entity"),
-            "export_last": self._get_entity_state(self._export_entity, "Export entity"),
+            "import_last": self._get_entity_state(self._import_entity, "Import entity", is_optional=False),
+            "export_last": self._get_entity_state(self._export_entity, "Export entity", is_optional=True),
             "calibration": {
                 "import_baseline": 0.0,
                 "peak_baseline": 0.0,
@@ -989,8 +1000,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             "export_total": 0.0,
             "import_peak": 0.0,
             "import_offpeak": 0.0,
-            "import_start": self._get_entity_state(self._import_entity, "Import entity"),
-            "export_start": self._get_entity_state(self._export_entity, "Export entity"),
+            "import_start": self._get_entity_state(self._import_entity, "Import entity", is_optional=False),
+            "export_start": self._get_entity_state(self._export_entity, "Export entity", is_optional=True),
         }
 
     def _compute_delta(self, current_value: float, last_key: str) -> float:
@@ -1529,7 +1540,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "4.0.1",
+            "sw_version": "4.0.2",
         }
 
     @property

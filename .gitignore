@@ -118,10 +118,12 @@ TODO.md
 debug_calc.py
 test_*.py
 TESTING_GUIDE.md
+TESTING_v*.md
 BETA_SETUP.md
 create_beta_release.sh
 examples.md
 HACS_CHECKLIST.md
+CODE_REVIEW_*.md
 RELEASE_NOTES_*.md
 TNB ToU.xlsx
 dashboards/tnb_calculator_bubble_dashboard.yaml
