@@ -218,3 +218,74 @@ adjust_export_energy_values:
           step: 0.1
           mode: box
           unit_of_measurement: "kWh"
+
+set_tariff_rates:
+  name: Set Tariff Rates
+  description: |
+    Override tariff rates used in ToU cost calculations.
+    
+    🔄 TNB updates rates periodically. When new rates are announced, use this service to update your integration without waiting for a code update.
+    
+    💡 The AFA rate is applied to usage above 600 kWh. The default rate is 0.0145 RM/kWh.
+    
+    Example: afa_rate: 0.0160
+  fields:
+    afa_rate:
+      name: AFA Rate (RM/kWh)
+      description: |
+        Additional Facility Charge rate in RM per kWh.
+        Applied when monthly usage exceeds 600 kWh.
+        Default: 0.0145 RM/kWh
+        
+        Enter a value between 0 and 1 (e.g., 0.0145)
+      required: true
+      example: "0.0145"
+      selector:
+        text:
+
+reset_tariff_rates:
+  name: Reset Tariff Rates
+  description: |
+    Reset all tariff rate overrides back to default values.
+    
+    This will clear any custom AFA rate and revert to the hardcoded defaults.
+    
+    Default values:
+    - AFA Rate: 0.0145 RM/kWh
+    - AFA Threshold: 600 kWh
+    - Retailing Charge: RM 10.00
+  fields:
+    confirm:
+      name: Type "RESET" to confirm
+      description: Safety confirmation to prevent accidental resets.
+      required: true
+      example: RESET
+      selector:
+        text:
+
+fetch_tariff_rates:
+  name: Fetch Tariff Rates from API
+  description: |
+    Fetch tariff rates from a remote API endpoint.
+    
+    📡 Use this to pull the latest AFA rate from a configured API.
+    
+    Expected API response format:
+    ```json
+    {
+      "afa_rate": 0.0160,
+      "effective_date": "2025-01-01"
+    }
+    ```
+    
+    💡 The API URL can be configured in integration options or provided per-call.
+  fields:
+    api_url:
+      name: API URL (optional)
+      description: |
+        Override URL to fetch from.
+        Leave empty to use the configured default URL.
+      required: false
+      example: "https://api.example.com/tnb/tariffs"
+      selector:
+        text:

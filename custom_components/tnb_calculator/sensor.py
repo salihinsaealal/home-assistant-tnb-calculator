@@ -1,4 +1,5 @@
 """Sensor platform for TNB Calculator integration."""
+import asyncio
 import calendar
 import logging
 from datetime import datetime, time, timedelta
@@ -42,6 +43,16 @@ from .const import (
     BASE_SENSOR_TYPES,
     TOU_SENSOR_TYPES,
     MAX_DELTA_PER_INTERVAL,
+    # Tariff constants
+    DEFAULT_AFA_RATE,
+    DEFAULT_AFA_THRESHOLD,
+    DEFAULT_RETAILING_CHARGE,
+    TARIFF_SOURCE_DEFAULT,
+    TARIFF_SOURCE_MANUAL,
+    TARIFF_SOURCE_API,
+    TARIFF_SOURCE_WEBHOOK,
+    CONF_TARIFF_API_URL,
+    TARIFF_API_TIMEOUT,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -86,7 +97,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="4.0.2",
+        sw_version="4.1.0",
     )
 
     sensors = [
@@ -149,6 +160,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         self._state: Dict[str, Any] = {}
         self._last_update: Optional[datetime] = None
         
+        # Tariff API configuration (optional)
+        self._tariff_api_url = config.get(CONF_TARIFF_API_URL)
+        
         # Setup persistent storage with stable identifier
         # Use import entity as stable key so data survives delete/re-add
         if self._import_entity:
@@ -170,6 +184,13 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         self._last_successful_update = None
         self._validation_errors: list[str] = []
         self._last_validation_status: str = "OK"
+        
+        # Tariff overrides (loaded from storage, can be set via service)
+        self._tariff_overrides: Dict[str, Any] = {
+            "afa_rate": None,           # None = use DEFAULT_AFA_RATE
+            "source": TARIFF_SOURCE_DEFAULT,
+            "last_updated": None,
+        }
 
     async def _load_monthly_data(self, force_reload: bool = False) -> None:
         """Load monthly data from storage."""
@@ -266,12 +287,26 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             if self._daily_data and "date" in self._daily_data:
                 _LOGGER.debug("Loaded daily data for %s", self._daily_data["date"])
             self._daily_data_loaded = True
+            
+            # Load tariff overrides
+            stored_tariff = stored_data.get("tariff_overrides", {})
+            if stored_tariff:
+                self._tariff_overrides = {
+                    "afa_rate": stored_tariff.get("afa_rate"),
+                    "source": stored_tariff.get("source", TARIFF_SOURCE_DEFAULT),
+                    "last_updated": stored_tariff.get("last_updated"),
+                }
+                if self._tariff_overrides.get("afa_rate") is not None:
+                    _LOGGER.debug("Loaded tariff override - AFA rate: %s (source: %s)", 
+                                 self._tariff_overrides["afa_rate"],
+                                 self._tariff_overrides["source"])
         else:
             self._holiday_cache = {}
             self._last_holiday_fetch = None
             self._historical_months = {}
             self._daily_data = {}
             self._daily_data_loaded = True
+            # tariff_overrides already initialized in __init__ with defaults
             
         self._monthly_data_loaded = True
 
@@ -284,6 +319,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 "last_holiday_fetch": getattr(self, "_last_holiday_fetch", None),
                 "historical_months": getattr(self, "_historical_months", {}),
                 "daily_data": getattr(self, "_daily_data", {}),
+                "tariff_overrides": getattr(self, "_tariff_overrides", {}),
             }
             await self._store.async_save(storage_data)
             _LOGGER.debug("Saved data to storage: monthly + daily + %d holidays + %d historical months", 
@@ -857,6 +893,168 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         await self._save_monthly_data()
         await self.async_refresh()
 
+    async def async_set_tariff_rates(
+        self,
+        afa_rate: Optional[float] = None,
+    ) -> None:
+        """Set tariff rate overrides via service call.
+        
+        This method is the external interface for manual tariff updates.
+        Future: API and webhook sources will use _async_update_tariff_rates directly.
+        
+        Args:
+            afa_rate: AFA rate in RM/kWh (e.g., 0.0145). None = no change.
+        """
+        if afa_rate is not None:
+            if afa_rate < 0 or afa_rate > 1:
+                _LOGGER.warning("Invalid AFA rate: %s (must be 0-1)", afa_rate)
+                return
+            
+            self._tariff_overrides["afa_rate"] = afa_rate
+            self._tariff_overrides["source"] = TARIFF_SOURCE_MANUAL
+            self._tariff_overrides["last_updated"] = dt_util.now().isoformat()
+            
+            _LOGGER.info(
+                "Tariff rates updated - AFA: %.4f RM/kWh (source: %s)",
+                afa_rate,
+                TARIFF_SOURCE_MANUAL
+            )
+            
+            await self._save_monthly_data()
+            await self.async_refresh()
+
+    async def async_reset_tariff_rates(self) -> None:
+        """Reset tariff rates to defaults.
+        
+        Clears all overrides and reverts to hardcoded defaults.
+        """
+        self._tariff_overrides = {
+            "afa_rate": None,
+            "source": TARIFF_SOURCE_DEFAULT,
+            "last_updated": dt_util.now().isoformat(),
+        }
+        
+        _LOGGER.info("Tariff rates reset to defaults")
+        
+        await self._save_monthly_data()
+        await self.async_refresh()
+
+    async def async_fetch_tariff_rates(self, api_url: Optional[str] = None) -> bool:
+        """Fetch tariff rates from a remote API.
+        
+        Expected API response format:
+        {
+            "afa_rate": 0.0145,
+            "effective_date": "2025-01-01"  // optional
+        }
+        
+        Args:
+            api_url: Override URL (uses configured URL if not provided)
+            
+        Returns:
+            True if fetch was successful, False otherwise
+        """
+        url = api_url or self._tariff_api_url
+        
+        if not url:
+            _LOGGER.warning("No tariff API URL configured")
+            return False
+        
+        try:
+            session = async_get_clientsession(self.hass)
+            async with session.get(url, timeout=TARIFF_API_TIMEOUT) as response:
+                if response.status != 200:
+                    _LOGGER.error("Tariff API returned status %d", response.status)
+                    return False
+                
+                data = await response.json()
+                
+                # Extract AFA rate from response
+                afa_rate = data.get("afa_rate")
+                if afa_rate is None:
+                    _LOGGER.error("Tariff API response missing 'afa_rate' field")
+                    return False
+                
+                # Validate range
+                if not (0 <= afa_rate <= 1):
+                    _LOGGER.error("Invalid AFA rate from API: %s (must be 0-1)", afa_rate)
+                    return False
+                
+                # Update tariff overrides
+                self._tariff_overrides["afa_rate"] = afa_rate
+                self._tariff_overrides["source"] = TARIFF_SOURCE_API
+                self._tariff_overrides["last_updated"] = dt_util.now().isoformat()
+                self._tariff_overrides["api_url"] = url
+                
+                if "effective_date" in data:
+                    self._tariff_overrides["effective_date"] = data["effective_date"]
+                
+                _LOGGER.info(
+                    "Tariff rates fetched from API - AFA: %.4f RM/kWh (url: %s)",
+                    afa_rate,
+                    url
+                )
+                
+                await self._save_monthly_data()
+                await self.async_refresh()
+                return True
+                
+        except asyncio.TimeoutError:
+            _LOGGER.error("Tariff API request timed out after %ds", TARIFF_API_TIMEOUT)
+            return False
+        except Exception as ex:
+            _LOGGER.error("Failed to fetch tariff rates from API: %s", ex)
+            return False
+
+    async def async_update_tariff_from_webhook(self, data: Dict[str, Any]) -> bool:
+        """Update tariff rates from webhook payload.
+        
+        Expected webhook payload format:
+        {
+            "afa_rate": 0.0145,
+            "effective_date": "2025-01-01"  // optional
+        }
+        
+        Args:
+            data: Webhook payload dictionary
+            
+        Returns:
+            True if update was successful, False otherwise
+        """
+        afa_rate = data.get("afa_rate")
+        
+        if afa_rate is None:
+            _LOGGER.error("Webhook payload missing 'afa_rate' field")
+            return False
+        
+        # Validate type and range
+        try:
+            afa_rate = float(afa_rate)
+        except (ValueError, TypeError):
+            _LOGGER.error("Invalid AFA rate from webhook: %s (not a number)", afa_rate)
+            return False
+        
+        if not (0 <= afa_rate <= 1):
+            _LOGGER.error("Invalid AFA rate from webhook: %s (must be 0-1)", afa_rate)
+            return False
+        
+        # Update tariff overrides
+        self._tariff_overrides["afa_rate"] = afa_rate
+        self._tariff_overrides["source"] = TARIFF_SOURCE_WEBHOOK
+        self._tariff_overrides["last_updated"] = dt_util.now().isoformat()
+        
+        if "effective_date" in data:
+            self._tariff_overrides["effective_date"] = data["effective_date"]
+        
+        _LOGGER.info(
+            "Tariff rates updated from webhook - AFA: %.4f RM/kWh",
+            afa_rate
+        )
+        
+        await self._save_monthly_data()
+        await self.async_refresh()
+        return True
+
     def _get_entity_state(self, entity_id: Optional[str], source: str, is_optional: bool = False) -> float:
         """Get numeric state from entity, return 0.0 if unavailable.
         
@@ -888,6 +1086,22 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             if not is_optional:
                 self._add_validation_error(source, f"entity '{entity_id}' reported non-numeric state '{state.state}'")
             return 0.0
+
+    def _get_tariff_rate(self, key: str, default: float) -> float:
+        """Get tariff rate from overrides or return default.
+        
+        This abstraction allows future sources (API, webhook) to update rates
+        while keeping calculation code unchanged.
+        
+        Args:
+            key: The tariff key (e.g., "afa_rate")
+            default: Default value if no override is set
+            
+        Returns:
+            The overridden value or default
+        """
+        value = self._tariff_overrides.get(key)
+        return value if value is not None else default
 
     def _get_billing_period(self, dt: datetime) -> tuple[int, int]:
         """Calculate billing month/year based on start day.
@@ -1253,9 +1467,13 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         cap_rate = 0.0455
         netw_rate = 0.1285
         
-        # AFA & Retailing
-        afa = 0.0 if import_total < 600 else import_total * 0.0145
-        retailing = 10.0 if import_total > 600 else 0.0
+        # AFA & Retailing (using tariff overrides or defaults)
+        afa_rate = self._get_tariff_rate("afa_rate", DEFAULT_AFA_RATE)
+        afa_threshold = DEFAULT_AFA_THRESHOLD  # Future: can also be overridable
+        retailing_charge = DEFAULT_RETAILING_CHARGE  # Future: can also be overridable
+        
+        afa = 0.0 if import_total < afa_threshold else import_total * afa_rate
+        retailing = retailing_charge if import_total > afa_threshold else 0.0
         
         # ICT lookup
         ict_rate = self._lookup_ict_rate_tou(import_total)
@@ -1316,6 +1534,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             "rate_nem_offpeak": nem_off_rate,
             "rate_ict": ict_rate,
             "rate_import": 0.0,  # Not used in ToU (uses peak/offpeak instead)
+            "rate_afa": afa_rate,
+            "tariff_source": self._tariff_overrides.get("source", TARIFF_SOURCE_DEFAULT),
+            "tariff_last_updated": self._tariff_overrides.get("last_updated"),
         }
 
     def _calculate_non_tou_costs(
@@ -1540,7 +1761,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "4.0.2",
+            "sw_version": "4.1.0",
         }
 
     @property

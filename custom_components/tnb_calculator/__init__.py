@@ -6,11 +6,12 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.components.webhook import async_register, async_unregister
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 import voluptuous as vol
 
-from .const import DOMAIN
+from .const import DOMAIN, WEBHOOK_ID
 from .sensor import TNBDataCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,6 +61,21 @@ SERVICE_ADJUST_IMPORT_ENERGY_VALUES_SCHEMA = vol.Schema({
 
 SERVICE_ADJUST_EXPORT_ENERGY_VALUES_SCHEMA = vol.Schema({
     vol.Required("export_adjustment"): vol.Coerce(float),
+})
+
+SERVICE_SET_TARIFF_RATES_SCHEMA = vol.Schema({
+    vol.Required("afa_rate"): vol.All(
+        vol.Coerce(float), 
+        vol.Range(min=0, max=1)
+    ),
+})
+
+SERVICE_RESET_TARIFF_RATES_SCHEMA = vol.Schema({
+    vol.Required("confirm"): cv.string,
+})
+
+SERVICE_FETCH_TARIFF_RATES_SCHEMA = vol.Schema({
+    vol.Optional("api_url"): cv.url,
 })
 
 
@@ -245,6 +261,108 @@ Monthly Export: {coordinator.data.get('export_energy', 0):.2f} kWh
             handle_adjust_export_energy_values,
             schema=SERVICE_ADJUST_EXPORT_ENERGY_VALUES_SCHEMA,
         )
+        
+        async def handle_set_tariff_rates(call: ServiceCall) -> None:
+            """Handle setting tariff rate overrides."""
+            coordinator_data = hass.data[DOMAIN].get(entry.entry_id)
+            if not coordinator_data or "coordinator" not in coordinator_data:
+                _LOGGER.error("Could not find TNB Calculator coordinator for set_tariff_rates")
+                return
+            
+            coordinator: TNBDataCoordinator = coordinator_data["coordinator"]
+            afa_rate = call.data.get("afa_rate")
+            await coordinator.async_set_tariff_rates(afa_rate=afa_rate)
+        
+        hass.services.async_register(
+            DOMAIN,
+            "set_tariff_rates",
+            handle_set_tariff_rates,
+            schema=SERVICE_SET_TARIFF_RATES_SCHEMA,
+        )
+        
+        async def handle_reset_tariff_rates(call: ServiceCall) -> None:
+            """Handle resetting tariff rates to defaults."""
+            confirmation = call.data.get("confirm", "").strip().upper()
+            if confirmation != "RESET":
+                raise HomeAssistantError("Confirmation string must be 'RESET'")
+            
+            coordinator_data = hass.data[DOMAIN].get(entry.entry_id)
+            if not coordinator_data or "coordinator" not in coordinator_data:
+                _LOGGER.error("Could not find TNB Calculator coordinator for reset_tariff_rates")
+                return
+            
+            coordinator: TNBDataCoordinator = coordinator_data["coordinator"]
+            await coordinator.async_reset_tariff_rates()
+            _LOGGER.info("TNB Calculator tariff rates reset to defaults via service")
+        
+        hass.services.async_register(
+            DOMAIN,
+            "reset_tariff_rates",
+            handle_reset_tariff_rates,
+            schema=SERVICE_RESET_TARIFF_RATES_SCHEMA,
+        )
+        
+        async def handle_fetch_tariff_rates(call: ServiceCall) -> None:
+            """Handle fetching tariff rates from API."""
+            coordinator_data = hass.data[DOMAIN].get(entry.entry_id)
+            if not coordinator_data or "coordinator" not in coordinator_data:
+                _LOGGER.error("Could not find TNB Calculator coordinator for fetch_tariff_rates")
+                return
+            
+            coordinator: TNBDataCoordinator = coordinator_data["coordinator"]
+            api_url = call.data.get("api_url")
+            success = await coordinator.async_fetch_tariff_rates(api_url=api_url)
+            
+            if not success:
+                raise HomeAssistantError("Failed to fetch tariff rates from API")
+            
+            _LOGGER.info("TNB Calculator tariff rates fetched from API via service")
+        
+        hass.services.async_register(
+            DOMAIN,
+            "fetch_tariff_rates",
+            handle_fetch_tariff_rates,
+            schema=SERVICE_FETCH_TARIFF_RATES_SCHEMA,
+        )
+        
+        # Register webhook for tariff updates
+        async def handle_tariff_webhook(hass: HomeAssistant, webhook_id: str, request) -> None:
+            """Handle incoming webhook for tariff rate updates."""
+            try:
+                data = await request.json()
+            except Exception as ex:
+                _LOGGER.error("Invalid JSON in tariff webhook: %s", ex)
+                return
+            
+            coordinator_data = hass.data[DOMAIN].get(entry.entry_id)
+            if not coordinator_data or "coordinator" not in coordinator_data:
+                _LOGGER.error("Could not find TNB Calculator coordinator for webhook")
+                return
+            
+            coordinator: TNBDataCoordinator = coordinator_data["coordinator"]
+            success = await coordinator.async_update_tariff_from_webhook(data)
+            
+            if success:
+                _LOGGER.info("Tariff rates updated via webhook")
+            else:
+                _LOGGER.warning("Webhook tariff update failed - check payload format")
+        
+        # Generate unique webhook ID per entry
+        webhook_id = f"{WEBHOOK_ID}_{entry.entry_id}"
+        async_register(
+            hass,
+            DOMAIN,
+            "TNB Calculator Tariff Webhook",
+            webhook_id,
+            handle_tariff_webhook,
+        )
+        
+        # Store webhook ID for cleanup
+        hass.data[DOMAIN][entry.entry_id]["webhook_id"] = webhook_id
+        
+        # Log webhook URL for user
+        webhook_url = f"{hass.config.external_url or hass.config.internal_url}/api/webhook/{webhook_id}"
+        _LOGGER.info("TNB Calculator tariff webhook registered: %s", webhook_url)
 
         return True
 
@@ -268,6 +386,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
+        # Unregister webhook
+        entry_data = hass.data[DOMAIN].get(entry.entry_id, {})
+        webhook_id = entry_data.get("webhook_id")
+        if webhook_id:
+            async_unregister(hass, webhook_id)
+            _LOGGER.debug("Unregistered tariff webhook: %s", webhook_id)
+        
         hass.data[DOMAIN].pop(entry.entry_id)
 
     return unload_ok

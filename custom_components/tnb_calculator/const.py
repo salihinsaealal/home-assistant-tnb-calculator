@@ -21,7 +21,26 @@ CONF_CALENDARIFIC_API_KEY = "calendarific_api_key"
 CONF_COUNTRY = "country"
 CONF_YEAR = "year"
 CONF_BILLING_START_DAY = "billing_start_day"
-CONF_VERSION = "4.0.2"
+CONF_VERSION = "4.1.0"
+
+# Tariff defaults (can be overridden via service)
+DEFAULT_AFA_RATE = 0.0145          # RM/kWh for usage >= 600 kWh
+DEFAULT_AFA_THRESHOLD = 600        # kWh threshold for AFA
+DEFAULT_RETAILING_CHARGE = 10.0    # RM fixed charge for usage > 600 kWh
+
+# Tariff source types
+TARIFF_SOURCE_DEFAULT = "default"
+TARIFF_SOURCE_MANUAL = "manual"
+TARIFF_SOURCE_API = "api"
+TARIFF_SOURCE_WEBHOOK = "webhook"
+
+# Tariff API configuration
+CONF_TARIFF_API_URL = "tariff_api_url"
+DEFAULT_TARIFF_API_URL = None  # No default - user must configure
+TARIFF_API_TIMEOUT = 10  # seconds
+
+# Webhook configuration
+WEBHOOK_ID = "tnb_calculator_tariff_webhook"
 
 # Base sensor types (always exposed) - ordered by priority
 BASE_SENSOR_TYPES = {
@@ -445,6 +464,28 @@ TOU_SENSOR_TYPES = {
         "name": "NEM Offpeak Rate",
         "unit": "RM/kWh",
         "state_class": "measurement",
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    # Tariff override sensors
+    "rate_afa": {
+        "name": "AFA Rate",
+        "unit": "RM/kWh",
+        "device_class": None,
+        "state_class": "measurement",
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    "tariff_source": {
+        "name": "Tariff Source",
+        "unit": None,
+        "device_class": None,
+        "state_class": None,
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    "tariff_last_updated": {
+        "name": "Tariff Last Updated",
+        "unit": None,
+        "device_class": "timestamp",
+        "state_class": None,
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
 }
