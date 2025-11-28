@@ -273,8 +273,10 @@ fetch_tariff_rates:
     Expected API response format:
     ```json
     {
-      "afa_rate": 0.0160,
-      "effective_date": "2025-01-01"
+        "afa_rate": 0.0891,
+        "afa_rate_raw": -0.0891,
+        "effective_date": "2025-11-01",
+        "last_scraped": "2025-11-28T09:29:08.975711"
     }
     ```
     
