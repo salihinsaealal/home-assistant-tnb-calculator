@@ -48,9 +48,10 @@ curl http://localhost:8001/afa/simple
 
 ```json
 {
-  "afa_rate": -0.0891,
-  "effective_date": "2025-11-01",
-  "last_scraped": "2025-11-28T09:00:00.123456"
+    "afa_rate": 0.0891,
+    "afa_rate_raw": -0.0891,
+    "effective_date": "2025-11-01",
+    "last_scraped": "2025-11-28T09:29:08.975711"
 }
 ```
 
@@ -77,7 +78,7 @@ automation:
   - alias: "Update TNB AFA Rate Monthly"
     trigger:
       - platform: time
-        at: "00:05:00"
+        at: "00:08:00"
     condition:
       - condition: template
         value_template: "{{ now().day == 1 }}"
@@ -119,4 +120,4 @@ docker compose down
 - **Base Image:** `mcr.microsoft.com/playwright/python:v1.40.0-focal`
 - **Framework:** FastAPI + Uvicorn
 - **Browser:** Chromium (headless)
-- **Port:** 8000
+- **Port:** 8001 (mapped from 8000 in container - exposed on host port 8001 for external access)
