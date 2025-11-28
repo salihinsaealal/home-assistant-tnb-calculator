@@ -18,6 +18,21 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
+## ⭐ What's New in v4.1.1
+
+### 🔄 Dynamic AFA Rate Management (API & Scraper Ready)
+
+- **Configurable AFA Rate**: AFA (Additional Fuel Adjustment) rate is now fully configurable via services and stored in persistent storage.
+- **Multiple Sources**: AFA rate can come from:
+  - **Default** hard-coded tariff
+  - **Manual override** via `set_tariff_rates` service
+  - **Remote API** via `fetch_tariff_rates` service
+  - **Webhook** updates (future integrations)
+- **Diagnostic Sensors**: New sensors expose the current AFA rate, source, and last updated time for easier monitoring.
+- **External Scraper Support**: Optional `tnb-afa-scraper` (FastAPI + Playwright) service to automatically scrape TNB's AFA table and return a ready-to-use `afa_rate`.
+- **Automation Blueprint**: Bundle includes `auto_update_afa_rate` automation blueprint to call `tnb_calculator.fetch_tariff_rates` monthly using the scraper URL.
+- **Positive AFA Rate Handling**: Scraper normalizes TNB's negative rebate values to a positive `afa_rate` so existing cost calculations remain correct.
+
 ## ⭐ What's New in v4.0.0
 
 ### 🎉 Major Release - Configuration & Calibration Overhaul
@@ -338,4 +353,5 @@ This integration is open source. Feel free to modify and share.
 
 ## Version History
 
+- v4.1.1: Dynamic AFA rate management, external scraper support, and automation blueprint for automatic AFA updates
 - v1.0.0: Initial release with non-ToU and ToU support
