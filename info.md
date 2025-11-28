@@ -38,6 +38,51 @@ A Home Assistant integration to calculate your TNB (Tenaga Nasional Berhad) elec
 3. Either create a dedicated dashboard with the file content or merge its `views:` block with an existing dashboard.
 4. Adjust entity IDs only if you renamed the default sensors.
 
+## Optional: Automatic AFA Rate Updates
+
+You can keep the Additional Fuel Adjustment (AFA) rate in sync with TNB's website using:
+
+- **External scraper service** (FastAPI + Playwright) in `tnb-afa-scraper/`
+- **Automation blueprint** in `blueprints/automation/tnb_calculator/auto_update_afa_rate.yaml`
+
+### External scraper (tnb-afa-scraper)
+
+Run the scraper on a small Linux server (e.g. N150 Ubuntu) with Docker Compose. It exposes:
+
+```http
+GET /afa/simple
+```
+
+Example response:
+
+```json
+{
+  "afa_rate": 0.0891,
+  "afa_rate_raw": -0.0891,
+  "effective_date": "2025-11-01",
+  "last_scraped": "2025-11-28T10:18:14.908641"
+}
+```
+
+Use the `afa_rate` field (positive RM/kWh) with the `tnb_calculator.fetch_tariff_rates` service.
+
+### Automation blueprint
+
+1. Copy the blueprint file to your Home Assistant config:
+
+   ```text
+   /config/blueprints/automation/tnb_calculator/auto_update_afa_rate.yaml
+   ```
+
+2. In Home Assistant, go to **Settings → Automations & Scenes → Blueprints**.
+3. Select **"TNB Calculator – Auto Update AFA Rate"** → **Create automation from blueprint**.
+4. Configure:
+   - **Scraper API URL**: `http://<N150-IP>:8001/afa/simple`
+   - **Time of day**: e.g. `00:10:00`
+   - **Day of month**: e.g. `1`
+
+The automation will call `tnb_calculator.fetch_tariff_rates` monthly with the scraper URL and update the AFA rate automatically.
+
 ## Configuration
 
 1. Go to Settings > Devices & Services

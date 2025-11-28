@@ -1,0 +1,14 @@
+services:
+  tnb-afa-scraper:
+    build: .
+    container_name: tnb-afa-scraper
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    environment:
+      - TZ=Asia/Kuala_Lumpur
+    volumes:
+      - afa-cache:/app/data
+
+volumes:
+  afa-cache:
