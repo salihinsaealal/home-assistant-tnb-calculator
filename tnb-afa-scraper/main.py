@@ -88,6 +88,7 @@ async def _do_scrape_and_cache() -> Dict[str, Any]:
     logger.info("Starting scrape...")
     body_text, debug_log = await _scrape_raw()
     all_rates = _extract_rates(body_text)
+    tariffs = _extract_tariffs(body_text)
     
     if not all_rates:
         logger.error("Scrape found no rates!")
@@ -101,6 +102,7 @@ async def _do_scrape_and_cache() -> Dict[str, Any]:
     cache_data = {
         "last_scraped": now.isoformat(),
         "all_rates": all_rates,
+        "tariffs": tariffs,
         "current_rate": {
             # Store absolute value (positive) for Home Assistant compatibility
             # TNB returns negative for rebates, but HA integration expects positive
@@ -127,6 +129,188 @@ def _select_current_rate(all_rates: List[Dict], now: datetime) -> Dict[str, Any]
     
     # Fallback to most recent
     return sorted(all_rates, key=lambda x: (x["year"], x["end_month"]), reverse=True)[0]
+
+
+def _extract_tariffs(text: str) -> Dict[str, Any]:
+    """Extract all tariff components from the TNB page text.
+
+    Parses:
+    1. Non-ToU rates (Caj Tenaga without puncak/luar puncak)
+    2. ToU rates (Caj Tenaga with puncak/luar puncak)
+    3. Capacity and Network (shared across all)
+    4. Retailing charge (Caj Peruncitan)
+    5. ICT tiers (Insentif Cekap Tenaga)
+
+    Returns a comprehensive dict in RM/kWh (or RM for fixed charges):
+    {
+      "non_tou": {
+        "tier1": {"generation": 0.2703, "capacity": 0.0455, "network": 0.1285},
+        "tier2": {"generation": 0.3703, ...},
+        "threshold_kwh": 600
+      },
+      "tou": {
+        "tier1": {"generation_peak": 0.2852, "generation_offpeak": 0.2443, ...},
+        "tier2": {"generation_peak": 0.3852, "generation_offpeak": 0.3443, ...},
+        "threshold_kwh": 1500
+      },
+      "shared": {
+        "capacity": 0.0455,
+        "network": 0.1285,
+        "retailing": 10.00
+      },
+      "ict_tiers": [
+        {"min_kwh": 1, "max_kwh": 200, "rate": -0.25},
+        ...
+      ]
+    }
+    """
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+    def sen_to_rm(val: float) -> float:
+        return round(val / 100.0, 6)
+
+    def parse_last_number(line: str) -> Optional[float]:
+        """Extract the last numeric value from a line."""
+        # Handle tabs or multiple spaces as delimiters
+        parts = [p.strip() for p in re.split(r'[\t]+', line) if p.strip()]
+        if not parts:
+            return None
+        try:
+            # Try to parse the last part as a number
+            return float(parts[-1].replace(',', ''))
+        except ValueError:
+            return None
+
+    # Storage for parsed values
+    non_tou_gen: List[float] = []  # Non-ToU generation rates
+    tou_peak: List[float] = []     # ToU peak rates
+    tou_offpeak: List[float] = []  # ToU off-peak rates
+    capacity_vals: List[float] = []
+    network_vals: List[float] = []
+    retailing_vals: List[float] = []
+    ict_tiers: List[Dict[str, Any]] = []
+
+    for line in lines:
+        lower = line.lower()
+
+        # === Non-ToU Generation ===
+        # "Caj Tenaga - Untuk semua kWj" (without puncak/luar puncak)
+        if "caj tenaga - untuk semua kwj" in lower and "puncak" not in lower:
+            val = parse_last_number(line)
+            if val is not None:
+                non_tou_gen.append(val)
+
+        # === ToU Peak ===
+        # "Caj Tenaga - Untuk semua kWj semasa tempoh puncak"
+        elif "caj tenaga" in lower and "tempoh puncak" in lower and "luar" not in lower:
+            val = parse_last_number(line)
+            if val is not None:
+                tou_peak.append(val)
+
+        # === ToU Off-Peak ===
+        # "Caj Tenaga - Untuk semua kWj semasa tempoh luar puncak"
+        elif "caj tenaga" in lower and "luar puncak" in lower:
+            val = parse_last_number(line)
+            if val is not None:
+                tou_offpeak.append(val)
+
+        # === Capacity ===
+        elif "caj kapasiti - untuk semua kwj" in lower:
+            val = parse_last_number(line)
+            if val is not None:
+                capacity_vals.append(val)
+
+        # === Network ===
+        elif "caj rangkaian - untuk semua kwj" in lower:
+            val = parse_last_number(line)
+            if val is not None:
+                network_vals.append(val)
+
+        # === Retailing ===
+        elif "caj peruncitan" in lower and "rm/bulan" in lower:
+            val = parse_last_number(line)
+            if val is not None:
+                retailing_vals.append(val)
+
+        # === ICT Tiers ===
+        # Pattern: "1 - 200 sen/kWj -25.0" or "901 - 1,000 sen/kWj -0.5"
+        elif "sen/kwj" in lower and re.search(r'\d+\s*-\s*[\d,]+', line):
+            # Check if this is an ICT tier (has negative rate or is in ICT section)
+            range_match = re.search(r'(\d+)\s*-\s*([\d,]+)', line)
+            rate_match = re.search(r'(-?\d+\.?\d*)\s*$', line.strip())
+            if range_match and rate_match:
+                min_kwh = int(range_match.group(1))
+                max_kwh = int(range_match.group(2).replace(',', ''))
+                rate_sen = float(rate_match.group(1))
+                # ICT rates are typically negative (rebates)
+                if rate_sen <= 0 or min_kwh >= 1:
+                    ict_tiers.append({
+                        "min_kwh": min_kwh,
+                        "max_kwh": max_kwh,
+                        "rate_sen": rate_sen,
+                        "rate_rm": sen_to_rm(rate_sen),
+                    })
+
+    # Build result dict
+    result: Dict[str, Any] = {}
+
+    # === Non-ToU ===
+    if non_tou_gen:
+        non_tou_sorted = sorted(set(non_tou_gen))
+        tier1_gen = non_tou_sorted[0]
+        tier2_gen = non_tou_sorted[1] if len(non_tou_sorted) > 1 else tier1_gen
+        result["non_tou"] = {
+            "tier1": {
+                "generation": sen_to_rm(tier1_gen),
+            },
+            "tier2": {
+                "generation": sen_to_rm(tier2_gen),
+            },
+            "threshold_kwh": 600,  # From TNB: "600 kWj dan ke bawah"
+            "note": "tier1 for ≤600 kWh, tier2 for >600 kWh",
+        }
+
+    # === ToU ===
+    if tou_peak and tou_offpeak:
+        peak_sorted = sorted(set(tou_peak))
+        offpeak_sorted = sorted(set(tou_offpeak))
+        result["tou"] = {
+            "tier1": {
+                "generation_peak": sen_to_rm(peak_sorted[0]),
+                "generation_offpeak": sen_to_rm(offpeak_sorted[0]),
+            },
+            "tier2": {
+                "generation_peak": sen_to_rm(peak_sorted[1]) if len(peak_sorted) > 1 else sen_to_rm(peak_sorted[0]),
+                "generation_offpeak": sen_to_rm(offpeak_sorted[1]) if len(offpeak_sorted) > 1 else sen_to_rm(offpeak_sorted[0]),
+            },
+            "threshold_kwh": 1500,  # From integration: uses different rates above 1500
+            "note": "tier1 for <1500 kWh, tier2 for ≥1500 kWh",
+        }
+
+    # === Shared rates ===
+    shared: Dict[str, Any] = {}
+    if capacity_vals:
+        shared["capacity"] = sen_to_rm(capacity_vals[0])
+    if network_vals:
+        shared["network"] = sen_to_rm(network_vals[0])
+    if retailing_vals:
+        shared["retailing"] = retailing_vals[0]  # Already in RM
+    if shared:
+        result["shared"] = shared
+
+    # === ICT Tiers ===
+    if ict_tiers:
+        # Sort by min_kwh and deduplicate
+        seen = set()
+        unique_tiers = []
+        for tier in sorted(ict_tiers, key=lambda x: x["min_kwh"]):
+            key = (tier["min_kwh"], tier["max_kwh"])
+            if key not in seen:
+                seen.add(key)
+                unique_tiers.append(tier)
+        result["ict_tiers"] = unique_tiers
+
+    return result
 
 
 @asynccontextmanager
@@ -524,15 +708,15 @@ async def get_afa_simple() -> Dict[str, Any]:
     }
 
 
-@app.get("/afa/refresh")
-async def refresh_afa() -> Dict[str, Any]:
+@app.get("/refresh")
+async def refresh_all() -> Dict[str, Any]:
     """
     Force a re-scrape of TNB website and update cache.
     Use this if you need fresh data immediately.
     
-    Returns the new cached data.
+    Returns summary of refreshed data.
     """
-    logger.info("Manual refresh triggered via /afa/refresh")
+    logger.info("Manual refresh triggered via /refresh")
     cache_data = await _do_scrape_and_cache()
     
     return {
@@ -561,20 +745,70 @@ async def get_all_rates() -> Dict[str, Any]:
     }
 
 
-@app.get("/afa/debug")
-async def get_afa_debug() -> Dict[str, Any]:
-    """Debug endpoint - performs LIVE scrape (slow) to see raw data."""
+@app.get("/complete")
+async def get_complete_data() -> Dict[str, Any]:
+    """
+    Return complete cached tariff data (AFA + base rates + future ToU/ICT).
+    
+    This endpoint provides:
+    - last_scraped: When data was fetched from TNB
+    - current_rate: The AFA rate applicable for the current month
+    - all_rates: All AFA rates with both raw and absolute values
+    - tariffs: Base tariff rates (generation/capacity/network)
+    - metadata: Additional info about the data
+    
+    All AFA rates include:
+    - rate_rm: Original value (negative = rebate)
+    - rate_rm_abs: Absolute value (always positive, for HA compatibility)
+    """
+    if not _cache or "all_rates" not in _cache:
+        logger.warning("Cache miss on /complete, triggering scrape...")
+        await _do_scrape_and_cache()
+    
+    # Enrich all_rates with absolute values
+    enriched_rates = []
+    for rate in _cache.get("all_rates", []):
+        enriched = rate.copy()
+        enriched["rate_rm_abs"] = abs(rate.get("rate_rm", 0))
+        enriched_rates.append(enriched)
+    
+    return {
+        "last_scraped": _cache.get("last_scraped"),
+        "current_rate": _cache.get("current_rate"),
+        "all_rates": enriched_rates,
+        "tariffs": _cache.get("tariffs", {}),
+        "metadata": {
+            "source": "https://www.mytnb.com.my/tariff/index.html#afa",
+            "rates_count": len(enriched_rates),
+            "note": "rate_rm is original (negative=rebate), rate_rm_abs is always positive",
+        },
+    }
+
+
+@app.get("/debug")
+async def get_debug_data() -> Dict[str, Any]:
+    """Debug endpoint - performs LIVE scrape (slow) to see raw data.
+    
+    Use this to study the page structure for parsing improvements.
+    """
     now = datetime.now()
     body_text, debug_log = await _scrape_raw()
     all_rates = _extract_rates(body_text)
+    tariffs = _extract_tariffs(body_text)
     
-    # Find lines containing "sen" for debugging
-    sen_lines = [ln.strip() for ln in body_text.splitlines() if "sen" in ln.lower()]
+    # Find lines containing tariff-related keywords
+    tariff_lines = []
+    for ln in body_text.splitlines():
+        lower = ln.lower().strip()
+        if any(kw in lower for kw in ["sen/kwj", "rm/kwj", "caj ", "kadar", "puncak", "luar puncak", "blok", "insentif"]):
+            tariff_lines.append(ln.strip())
     
     return {
         "current_date": now.isoformat(),
         "debug_log": debug_log,
-        "rates_found": all_rates,
-        "sen_lines_sample": sen_lines[:20],
-        "body_text_sample": body_text[:3000],
+        "afa_rates_found": all_rates,
+        "tariffs_found": tariffs,
+        "tariff_lines": tariff_lines[:100],  # More lines for study
+        "body_text_length": len(body_text),
+        "body_text_full": body_text,  # Full text for thorough study
     }

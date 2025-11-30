@@ -4,8 +4,11 @@ blueprint:
     Automatically updates the TNB Calculator AFA rate monthly using the external
     Playwright-based scraper service.
 
-    This blueprint calls the `tnb_calculator.fetch_tariff_rates` service with the
+    This blueprint calls the `tnb_calculator.fetch_afa_rate` service with the
     configured API URL (e.g. your N150 scraper: http://192.168.x.x:8001/afa/simple).
+    
+    For fetching all tariff rates (generation, capacity, network, ICT), use
+    the `tnb_calculator.fetch_all_rates` service with the /complete endpoint instead.
 
   domain: automation
   source_url: https://github.com/salihinsaealal/home-assistant-tnb-calculator
@@ -53,6 +56,6 @@ condition:
     value_template: "{{ now().day == (run_day | int) }}"
 
 action:
-  - service: tnb_calculator.fetch_tariff_rates
+  - service: tnb_calculator.fetch_afa_rate
     data:
       api_url: !input scraper_api_url

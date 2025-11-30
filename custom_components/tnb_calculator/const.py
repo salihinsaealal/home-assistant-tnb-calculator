@@ -21,7 +21,7 @@ CONF_CALENDARIFIC_API_KEY = "calendarific_api_key"
 CONF_COUNTRY = "country"
 CONF_YEAR = "year"
 CONF_BILLING_START_DAY = "billing_start_day"
-CONF_VERSION = "4.1.0"
+CONF_VERSION = "4.2.0"
 
 # Tariff defaults (can be overridden via service)
 DEFAULT_AFA_RATE = 0.0145          # RM/kWh for usage >= 600 kWh
@@ -47,14 +47,14 @@ BASE_SENSOR_TYPES = {
     # PRIORITY: Most important sensors at the top - Both cost types for easy comparison
     "total_cost_tou": {
         "name": "Total Cost (ToU)",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": None,  # Main entity
     },
     "total_cost_non_tou": {
         "name": "Total Cost (Non-ToU)",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": None,  # Main entity
@@ -98,7 +98,7 @@ BASE_SENSOR_TYPES = {
     # Prediction sensors
     "predicted_monthly_cost": {
         "name": "Predicted Monthly Cost",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": None,
         "entity_category": None,  # Main entity
@@ -112,14 +112,14 @@ BASE_SENSOR_TYPES = {
     },
     "predicted_from_trend": {
         "name": "Predicted Cost (Current Trend)",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": None,
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "predicted_from_history": {
         "name": "Predicted Cost (Historical)",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": None,
         "entity_category": EntityCategory.DIAGNOSTIC,
@@ -133,7 +133,7 @@ BASE_SENSOR_TYPES = {
     },
     "daily_average_cost": {
         "name": "Daily Average Cost",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": None,
         "entity_category": EntityCategory.DIAGNOSTIC,
@@ -176,14 +176,14 @@ BASE_SENSOR_TYPES = {
     },
     "today_cost_tou": {
         "name": "Today Cost (ToU)",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": None,  # Main entity
     },
     "today_cost_non_tou": {
         "name": "Today Cost (Non-ToU)",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": None,  # Main entity
@@ -285,14 +285,14 @@ BASE_SENSOR_TYPES = {
     # Secondary cost breakdown
     "peak_cost": {
         "name": "Peak Cost",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "off_peak_cost": {
         "name": "Off Peak Cost",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
@@ -344,63 +344,63 @@ TOU_SENSOR_TYPES = {
     # Detailed charges (diagnostic - hidden by default)
     "charge_generation_peak": {
         "name": "Generation Charge Peak",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "charge_generation_offpeak": {
         "name": "Generation Charge Offpeak",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "charge_afa": {
         "name": "AFA Charge",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "charge_capacity": {
         "name": "Capacity Charge",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "charge_network": {
         "name": "Network Charge",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "charge_retailing": {
         "name": "Retailing Charge",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "charge_ict": {
         "name": "ICT Adjustment",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "charge_service_tax": {
         "name": "Service Tax",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "charge_kwtbb": {
         "name": "KWTBB Charge",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
@@ -408,35 +408,35 @@ TOU_SENSOR_TYPES = {
     # Rebates (diagnostic - hidden by default)
     "rebate_nem_peak": {
         "name": "NEM Rebate Peak",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "rebate_nem_offpeak": {
         "name": "NEM Rebate Offpeak",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "rebate_nem_capacity": {
         "name": "NEM Rebate Capacity",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "rebate_nem_network": {
         "name": "NEM Rebate Network",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "rebate_insentif": {
         "name": "Insentif Leveling Rebate",
-        "unit": "RM",
+        "unit": "MYR",
         "device_class": "monetary",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,

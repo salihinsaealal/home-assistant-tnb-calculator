@@ -63,7 +63,7 @@ SERVICE_ADJUST_EXPORT_ENERGY_VALUES_SCHEMA = vol.Schema({
     vol.Required("export_adjustment"): vol.Coerce(float),
 })
 
-SERVICE_SET_TARIFF_RATES_SCHEMA = vol.Schema({
+SERVICE_SET_AFA_RATE_SCHEMA = vol.Schema({
     vol.Required("afa_rate"): vol.All(
         vol.Coerce(float), 
         vol.Range(min=0, max=1)
@@ -74,7 +74,11 @@ SERVICE_RESET_TARIFF_RATES_SCHEMA = vol.Schema({
     vol.Required("confirm"): cv.string,
 })
 
-SERVICE_FETCH_TARIFF_RATES_SCHEMA = vol.Schema({
+SERVICE_FETCH_AFA_RATE_SCHEMA = vol.Schema({
+    vol.Optional("api_url"): cv.url,
+})
+
+SERVICE_FETCH_ALL_RATES_SCHEMA = vol.Schema({
     vol.Optional("api_url"): cv.url,
 })
 
@@ -262,22 +266,22 @@ Monthly Export: {coordinator.data.get('export_energy', 0):.2f} kWh
             schema=SERVICE_ADJUST_EXPORT_ENERGY_VALUES_SCHEMA,
         )
         
-        async def handle_set_tariff_rates(call: ServiceCall) -> None:
-            """Handle setting tariff rate overrides."""
+        async def handle_set_afa_rate(call: ServiceCall) -> None:
+            """Handle manual AFA rate setting."""
             coordinator_data = hass.data[DOMAIN].get(entry.entry_id)
             if not coordinator_data or "coordinator" not in coordinator_data:
-                _LOGGER.error("Could not find TNB Calculator coordinator for set_tariff_rates")
+                _LOGGER.error("Could not find TNB Calculator coordinator for set_afa_rate")
                 return
             
             coordinator: TNBDataCoordinator = coordinator_data["coordinator"]
             afa_rate = call.data.get("afa_rate")
-            await coordinator.async_set_tariff_rates(afa_rate=afa_rate)
+            await coordinator.async_set_afa_rate(afa_rate=afa_rate)
         
         hass.services.async_register(
             DOMAIN,
-            "set_tariff_rates",
-            handle_set_tariff_rates,
-            schema=SERVICE_SET_TARIFF_RATES_SCHEMA,
+            "set_afa_rate",
+            handle_set_afa_rate,
+            schema=SERVICE_SET_AFA_RATE_SCHEMA,
         )
         
         async def handle_reset_tariff_rates(call: ServiceCall) -> None:
@@ -302,27 +306,50 @@ Monthly Export: {coordinator.data.get('export_energy', 0):.2f} kWh
             schema=SERVICE_RESET_TARIFF_RATES_SCHEMA,
         )
         
-        async def handle_fetch_tariff_rates(call: ServiceCall) -> None:
-            """Handle fetching tariff rates from API."""
+        async def handle_fetch_afa_rate(call: ServiceCall) -> None:
+            """Handle fetching AFA rate from /afa/simple API."""
             coordinator_data = hass.data[DOMAIN].get(entry.entry_id)
             if not coordinator_data or "coordinator" not in coordinator_data:
-                _LOGGER.error("Could not find TNB Calculator coordinator for fetch_tariff_rates")
+                _LOGGER.error("Could not find TNB Calculator coordinator for fetch_afa_rate")
                 return
             
             coordinator: TNBDataCoordinator = coordinator_data["coordinator"]
             api_url = call.data.get("api_url")
-            success = await coordinator.async_fetch_tariff_rates(api_url=api_url)
+            success = await coordinator.async_fetch_afa_rate(api_url=api_url)
             
             if not success:
-                raise HomeAssistantError("Failed to fetch tariff rates from API")
+                raise HomeAssistantError("Failed to fetch AFA rate from API")
             
-            _LOGGER.info("TNB Calculator tariff rates fetched from API via service")
+            _LOGGER.info("TNB Calculator AFA rate fetched from API via service")
         
         hass.services.async_register(
             DOMAIN,
-            "fetch_tariff_rates",
-            handle_fetch_tariff_rates,
-            schema=SERVICE_FETCH_TARIFF_RATES_SCHEMA,
+            "fetch_afa_rate",
+            handle_fetch_afa_rate,
+            schema=SERVICE_FETCH_AFA_RATE_SCHEMA,
+        )
+        
+        async def handle_fetch_all_rates(call: ServiceCall) -> None:
+            """Handle fetching all tariff rates from /complete API."""
+            coordinator_data = hass.data[DOMAIN].get(entry.entry_id)
+            if not coordinator_data or "coordinator" not in coordinator_data:
+                _LOGGER.error("Could not find TNB Calculator coordinator for fetch_all_rates")
+                return
+            
+            coordinator: TNBDataCoordinator = coordinator_data["coordinator"]
+            api_url = call.data.get("api_url")
+            success = await coordinator.async_fetch_all_rates(api_url=api_url)
+            
+            if not success:
+                raise HomeAssistantError("Failed to fetch all rates from API")
+            
+            _LOGGER.info("TNB Calculator all tariff rates fetched from API via service")
+        
+        hass.services.async_register(
+            DOMAIN,
+            "fetch_all_rates",
+            handle_fetch_all_rates,
+            schema=SERVICE_FETCH_ALL_RATES_SCHEMA,
         )
         
         # Register webhook for tariff updates

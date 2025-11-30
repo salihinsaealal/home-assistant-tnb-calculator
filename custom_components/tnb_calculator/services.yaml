@@ -13,7 +13,7 @@ compare_with_bill:
           max: 10000
           step: 0.01
           mode: box
-          unit_of_measurement: "RM"
+          unit_of_measurement: "MYR"
     month:
       name: Month
       description: Month of the bill (1-12). Leave empty for current month.
@@ -219,41 +219,66 @@ adjust_export_energy_values:
           mode: box
           unit_of_measurement: "kWh"
 
-set_tariff_rates:
-  name: Set Tariff Rates
+set_afa_rate:
+  name: Set AFA Rate (Manual)
   description: |
-    Override tariff rates used in ToU cost calculations.
+    Manually set the AFA (Automatic Fuel Adjustment) rate.
     
-    🔄 TNB updates rates periodically. When new rates are announced, use this service to update your integration without waiting for a code update.
+    🔄 Use this when you want to manually override the AFA rate without calling an API.
     
-    💡 The AFA rate is applied to usage above 600 kWh. The default rate is 0.0145 RM/kWh.
+    💡 The AFA rate is applied to usage above 600 kWh.
     
-    Example: afa_rate: 0.0160
+    📝 Note: Use `fetch_afa_rate` or `fetch_all_rates` to get rates from API instead.
+    
+    Example: afa_rate: 0.0891
   fields:
     afa_rate:
-      name: AFA Rate (RM/kWh)
+      name: AFA Rate (MYR/kWh)
       description: |
-        Additional Facility Charge rate in RM per kWh.
+        AFA (Automatic Fuel Adjustment) rate in MYR per kWh.
         Applied when monthly usage exceeds 600 kWh.
-        Default: 0.0145 RM/kWh
         
-        Enter a value between 0 and 1 (e.g., 0.0145)
+        Enter a positive value (e.g., 0.0891 for Nov 2025).
+        The integration handles sign internally.
       required: true
-      example: "0.0145"
+      example: "0.0891"
       selector:
-        text:
+        number:
+          min: 0
+          max: 1
+          step: 0.0001
+          mode: box
+          unit_of_measurement: "MYR/kWh"
 
 reset_tariff_rates:
-  name: Reset Tariff Rates
+  name: Reset All Tariff Rates
   description: |
-    Reset all tariff rate overrides back to default values.
+    Reset ALL tariff rate overrides back to hardcoded default values.
     
-    This will clear any custom AFA rate and revert to the hardcoded defaults.
+    This will clear any custom or API-fetched rates and revert to defaults.
     
-    Default values:
-    - AFA Rate: 0.0145 RM/kWh
+    **Default values after reset:**
+    
+    📊 **AFA (Automatic Fuel Adjustment)**
+    - AFA Rate: 0.0145 MYR/kWh
     - AFA Threshold: 600 kWh
-    - Retailing Charge: RM 10.00
+    
+    ⚡ **Generation Rates (ToU)**
+    - Peak Tier 1: 0.2852 MYR/kWh (<1500 kWh)
+    - Off-Peak Tier 1: 0.2443 MYR/kWh (<1500 kWh)
+    - Peak Tier 2: 0.3852 MYR/kWh (≥1500 kWh)
+    - Off-Peak Tier 2: 0.3443 MYR/kWh (≥1500 kWh)
+    
+    🔌 **Generation Rate (Non-ToU)**
+    - Import: 0.2703 MYR/kWh
+    
+    🏗️ **Shared Rates**
+    - Capacity: 0.0455 MYR/kWh
+    - Network: 0.1285 MYR/kWh
+    - Retailing: 10.00 MYR
+    
+    🎁 **ICT (Insentif Cekap Tenaga)**
+    - 16 tiers from -0.25 to -0.005 MYR/kWh
   fields:
     confirm:
       name: Type "RESET" to confirm
@@ -263,12 +288,12 @@ reset_tariff_rates:
       selector:
         text:
 
-fetch_tariff_rates:
-  name: Fetch Tariff Rates from API
+fetch_afa_rate:
+  name: Fetch AFA Rate from API
   description: |
-    Fetch tariff rates from a remote API endpoint.
+    Fetch only the AFA rate from the `/afa/simple` API endpoint.
     
-    📡 Use this to pull the latest AFA rate from a configured API.
+    📡 Use this for lightweight AFA-only updates.
     
     Expected API response format:
     ```json
@@ -276,18 +301,72 @@ fetch_tariff_rates:
         "afa_rate": 0.0891,
         "afa_rate_raw": -0.0891,
         "effective_date": "2025-11-01",
-        "last_scraped": "2025-11-28T09:29:08.975711"
+        "last_scraped": "2025-11-29T10:00:00"
     }
     ```
     
-    💡 The API URL can be configured in integration options or provided per-call.
+    💡 For all tariffs (generation, capacity, network, ICT, etc.), use `fetch_all_rates` instead.
   fields:
     api_url:
       name: API URL (optional)
       description: |
-        Override URL to fetch from.
+        Override URL to fetch AFA from.
+        Should point to `/afa/simple` endpoint.
         Leave empty to use the configured default URL.
       required: false
-      example: "https://api.example.com/tnb/tariffs"
+      example: "http://192.168.1.100:8001/afa/simple"
+      selector:
+        text:
+
+fetch_all_rates:
+  name: Fetch All Tariff Rates from API
+  description: |
+    Fetch complete tariff data from the `/complete` API endpoint.
+    
+    📡 This fetches ALL tariff rates in one call:
+    - AFA rates (current + all periods)
+    - Generation rates (ToU peak/off-peak, non-ToU)
+    - Capacity rate
+    - Network rate
+    - Retailing charge
+    - ICT tiers (16 levels)
+    
+    Expected API response format (from `/complete`):
+    ```json
+    {
+        "last_scraped": "2025-11-29T11:31:36",
+        "current_rate": {
+            "afa_rate": 0.0891,
+            "effective_date": "2025-11-01"
+        },
+        "tariffs": {
+            "non_tou": {
+                "tier1": { "generation": 0.2703 },
+                "tier2": { "generation": 0.3703 }
+            },
+            "tou": {
+                "tier1": { "generation_peak": 0.2852, "generation_offpeak": 0.2443 },
+                "tier2": { "generation_peak": 0.3852, "generation_offpeak": 0.3443 }
+            },
+            "shared": {
+                "capacity": 0.0455,
+                "network": 0.1285,
+                "retailing": 10.0
+            },
+            "ict_tiers": [...]
+        }
+    }
+    ```
+    
+    💡 Use `reset_tariff_rates` to revert to hardcoded defaults.
+  fields:
+    api_url:
+      name: API URL (optional)
+      description: |
+        Override URL to fetch all rates from.
+        Should point to `/complete` endpoint.
+        Leave empty to use the configured default URL with `/complete` path.
+      required: false
+      example: "http://192.168.1.100:8001/complete"
       selector:
         text:

@@ -40,9 +40,10 @@ curl http://localhost:8001/afa/simple
 |----------|--------|-------------|-------|
 | `/` | GET | Health check + cache status | Instant |
 | `/afa/simple` | GET | Current month's AFA rate | Instant (cached) |
-| `/afa/all` | GET | All cached rates | Instant (cached) |
-| `/afa/refresh` | GET | Force re-scrape | ~30s |
-| `/afa/debug` | GET | Debug info (live scrape) | ~30s |
+| `/afa/all` | GET | All AFA rates (all periods) | Instant (cached) |
+| `/complete` | GET | Complete tariff data (AFA + base rates) | Instant (cached) |
+| `/refresh` | GET | Force re-scrape all data | ~30s |
+| `/debug` | GET | Debug info + full page text | ~30s |
 
 ### Response Format (`/afa/simple`)
 

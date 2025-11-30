@@ -3,7 +3,7 @@ import asyncio
 import calendar
 import logging
 from datetime import datetime, time, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import voluptuous as vol
 
@@ -97,7 +97,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="4.1.1",
+        sw_version="4.2.0",
     )
 
     sensors = [
@@ -893,17 +893,17 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         await self._save_monthly_data()
         await self.async_refresh()
 
-    async def async_set_tariff_rates(
+    async def async_set_afa_rate(
         self,
         afa_rate: Optional[float] = None,
     ) -> None:
-        """Set tariff rate overrides via service call.
+        """Manually set the AFA rate via service call.
         
-        This method is the external interface for manual tariff updates.
-        Future: API and webhook sources will use _async_update_tariff_rates directly.
+        This method is for manual AFA rate overrides only.
+        For API updates, use async_fetch_afa_rate or async_fetch_all_rates.
         
         Args:
-            afa_rate: AFA rate in RM/kWh (e.g., 0.0145). None = no change.
+            afa_rate: AFA rate in MYR/kWh (e.g., 0.0891). Must be positive.
         """
         if afa_rate is not None:
             if afa_rate < 0 or afa_rate > 1:
@@ -915,7 +915,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             self._tariff_overrides["last_updated"] = dt_util.now().isoformat()
             
             _LOGGER.info(
-                "Tariff rates updated - AFA: %.4f RM/kWh (source: %s)",
+                "AFA rate set manually - AFA: %.4f MYR/kWh (source: %s)",
                 afa_rate,
                 TARIFF_SOURCE_MANUAL
             )
@@ -924,28 +924,40 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             await self.async_refresh()
 
     async def async_reset_tariff_rates(self) -> None:
-        """Reset tariff rates to defaults.
+        """Reset ALL tariff rates to hardcoded defaults.
         
-        Clears all overrides and reverts to hardcoded defaults.
+        Clears all overrides (AFA, tariffs, etc.) and reverts to:
+        - AFA: 0.0145 MYR/kWh (DEFAULT_AFA_RATE)
+        - ToU rates: 0.2852/0.2443/0.3852/0.3443
+        - Non-ToU: 0.2703
+        - Capacity: 0.0455
+        - Network: 0.1285
+        - Retailing: 10.00
+        - ICT: hardcoded tiers
         """
         self._tariff_overrides = {
-            "afa_rate": None,
+            "afa_rate": None,  # Will use DEFAULT_AFA_RATE
+            "tariffs": None,   # Will use hardcoded values
             "source": TARIFF_SOURCE_DEFAULT,
             "last_updated": dt_util.now().isoformat(),
+            "effective_date": None,
+            "api_url": None,
         }
         
-        _LOGGER.info("Tariff rates reset to defaults")
+        _LOGGER.info("All tariff rates reset to hardcoded defaults")
         
         await self._save_monthly_data()
         await self.async_refresh()
 
-    async def async_fetch_tariff_rates(self, api_url: Optional[str] = None) -> bool:
-        """Fetch tariff rates from a remote API.
+    async def async_fetch_afa_rate(self, api_url: Optional[str] = None) -> bool:
+        """Fetch AFA rate from /afa/simple API endpoint.
         
         Expected API response format:
         {
-            "afa_rate": 0.0145,
-            "effective_date": "2025-01-01"  // optional
+            "afa_rate": 0.0891,
+            "afa_rate_raw": -0.0891,
+            "effective_date": "2025-11-01",
+            "last_scraped": "2025-11-29T10:00:00"
         }
         
         Args:
@@ -964,7 +976,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             session = async_get_clientsession(self.hass)
             async with session.get(url, timeout=TARIFF_API_TIMEOUT) as response:
                 if response.status != 200:
-                    _LOGGER.error("Tariff API returned status %d", response.status)
+                    _LOGGER.error("AFA API returned status %d", response.status)
                     return False
                 
                 data = await response.json()
@@ -972,7 +984,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 # Extract AFA rate from response
                 afa_rate = data.get("afa_rate")
                 if afa_rate is None:
-                    _LOGGER.error("Tariff API response missing 'afa_rate' field")
+                    _LOGGER.error("AFA API response missing 'afa_rate' field")
                     return False
                 
                 # Validate range
@@ -990,7 +1002,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                     self._tariff_overrides["effective_date"] = data["effective_date"]
                 
                 _LOGGER.info(
-                    "Tariff rates fetched from API - AFA: %.4f RM/kWh (url: %s)",
+                    "AFA rate fetched from API - AFA: %.4f MYR/kWh (url: %s)",
                     afa_rate,
                     url
                 )
@@ -1000,10 +1012,136 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 return True
                 
         except asyncio.TimeoutError:
-            _LOGGER.error("Tariff API request timed out after %ds", TARIFF_API_TIMEOUT)
+            _LOGGER.error("AFA API request timed out after %ds", TARIFF_API_TIMEOUT)
             return False
         except Exception as ex:
-            _LOGGER.error("Failed to fetch tariff rates from API: %s", ex)
+            _LOGGER.error("Failed to fetch AFA rate from API: %s", ex)
+            return False
+
+    async def async_fetch_all_rates(self, api_url: Optional[str] = None) -> bool:
+        """Fetch all tariff rates from /complete API endpoint.
+        
+        Expected API response format:
+        {
+            "last_scraped": "2025-11-29T11:31:36",
+            "current_rate": {
+                "afa_rate": 0.0891,
+                "effective_date": "2025-11-01"
+            },
+            "tariffs": {
+                "non_tou": {
+                    "tier1": {"generation": 0.2703},
+                    "tier2": {"generation": 0.3703},
+                    "threshold_kwh": 600
+                },
+                "tou": {
+                    "tier1": {"generation_peak": 0.2852, "generation_offpeak": 0.2443},
+                    "tier2": {"generation_peak": 0.3852, "generation_offpeak": 0.3443},
+                    "threshold_kwh": 1500
+                },
+                "shared": {
+                    "capacity": 0.0455,
+                    "network": 0.1285,
+                    "retailing": 10.0
+                },
+                "ict_tiers": [...]
+            }
+        }
+        
+        Args:
+            api_url: Override URL (uses configured URL with /complete path if not provided)
+            
+        Returns:
+            True if fetch was successful, False otherwise
+        """
+        # If no URL provided, try to construct from configured base URL
+        if api_url:
+            url = api_url
+        elif self._tariff_api_url:
+            # Replace /afa/simple with /complete if present, or append /complete
+            base_url = self._tariff_api_url.replace("/afa/simple", "").rstrip("/")
+            url = f"{base_url}/complete"
+        else:
+            _LOGGER.warning("No tariff API URL configured")
+            return False
+        
+        try:
+            session = async_get_clientsession(self.hass)
+            async with session.get(url, timeout=TARIFF_API_TIMEOUT) as response:
+                if response.status != 200:
+                    _LOGGER.error("Complete API returned status %d", response.status)
+                    return False
+                
+                data = await response.json()
+                
+                # Extract and validate current_rate for AFA
+                current_rate = data.get("current_rate", {})
+                afa_rate = current_rate.get("afa_rate")
+                if afa_rate is None:
+                    _LOGGER.error("Complete API response missing 'current_rate.afa_rate'")
+                    return False
+                
+                if not (0 <= afa_rate <= 1):
+                    _LOGGER.error("Invalid AFA rate from API: %s (must be 0-1)", afa_rate)
+                    return False
+                
+                # Extract tariffs
+                tariffs = data.get("tariffs", {})
+                
+                # Update all tariff overrides
+                self._tariff_overrides["afa_rate"] = afa_rate
+                self._tariff_overrides["source"] = TARIFF_SOURCE_API
+                self._tariff_overrides["last_updated"] = dt_util.now().isoformat()
+                self._tariff_overrides["api_url"] = url
+                
+                if current_rate.get("effective_date"):
+                    self._tariff_overrides["effective_date"] = current_rate["effective_date"]
+                
+                # Store full tariff data for future use
+                if tariffs:
+                    self._tariff_overrides["tariffs"] = tariffs
+                    
+                    # Log what was fetched
+                    non_tou = tariffs.get("non_tou", {})
+                    tou = tariffs.get("tou", {})
+                    shared = tariffs.get("shared", {})
+                    ict_count = len(tariffs.get("ict_tiers", []))
+                    
+                    _LOGGER.info(
+                        "All rates fetched from API - AFA: %.4f, "
+                        "Non-ToU: tier1=%.4f/tier2=%.4f, "
+                        "ToU: peak=%.4f-%.4f/offpeak=%.4f-%.4f, "
+                        "Shared: cap=%.4f/net=%.4f/ret=%.2f, "
+                        "ICT: %d tiers (url: %s)",
+                        afa_rate,
+                        non_tou.get("tier1", {}).get("generation", 0),
+                        non_tou.get("tier2", {}).get("generation", 0),
+                        tou.get("tier1", {}).get("generation_peak", 0),
+                        tou.get("tier2", {}).get("generation_peak", 0),
+                        tou.get("tier1", {}).get("generation_offpeak", 0),
+                        tou.get("tier2", {}).get("generation_offpeak", 0),
+                        shared.get("capacity", 0),
+                        shared.get("network", 0),
+                        shared.get("retailing", 0),
+                        ict_count,
+                        url
+                    )
+                else:
+                    _LOGGER.info(
+                        "AFA rate fetched from complete API - AFA: %.4f MYR/kWh (url: %s)",
+                        afa_rate,
+                        url
+                    )
+                
+                await self._save_monthly_data()
+                await self.async_refresh()
+                return True
+                
+        except asyncio.TimeoutError:
+            _LOGGER.error("Complete API request timed out after %ds", TARIFF_API_TIMEOUT)
+            return False
+        except Exception as ex:
+            _LOGGER.error("Failed to fetch all rates from API: %s", ex)
             return False
 
     async def async_update_tariff_from_webhook(self, data: Dict[str, Any]) -> bool:
@@ -1254,6 +1392,100 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         self._monthly_data[last_key] = current_value
         return delta
 
+    # =========================================================================
+    # TARIFF RATE HELPERS - Read from stored tariffs with hardcoded fallbacks
+    # =========================================================================
+
+    def _get_stored_tariffs(self) -> Dict[str, Any]:
+        """Get stored tariffs from API, or empty dict if not available."""
+        return self._tariff_overrides.get("tariffs") or {}
+
+    def _get_tou_generation_rates(self, import_total: float) -> Tuple[float, float]:
+        """Get ToU generation rates (peak, offpeak) based on import threshold.
+        
+        Returns (peak_rate, offpeak_rate) in MYR/kWh.
+        Uses stored tariffs if available, otherwise hardcoded defaults.
+        """
+        tariffs = self._get_stored_tariffs()
+        tou = tariffs.get("tou", {})
+        
+        # Determine tier based on threshold (default 1500 kWh)
+        threshold = tou.get("threshold_kwh", 1500)
+        
+        if import_total < threshold:
+            tier = tou.get("tier1", {})
+            peak = tier.get("generation_peak", 0.2852)
+            offpeak = tier.get("generation_offpeak", 0.2443)
+        else:
+            tier = tou.get("tier2", {})
+            peak = tier.get("generation_peak", 0.3852)
+            offpeak = tier.get("generation_offpeak", 0.3443)
+        
+        return peak, offpeak
+
+    def _get_non_tou_generation_rate(self) -> float:
+        """Get non-ToU generation rate in MYR/kWh.
+        
+        Uses stored tariffs if available, otherwise hardcoded default.
+        Note: Non-ToU uses tier1 rate (for ≤600 kWh threshold).
+        """
+        tariffs = self._get_stored_tariffs()
+        non_tou = tariffs.get("non_tou", {})
+        tier1 = non_tou.get("tier1", {})
+        return tier1.get("generation", 0.2703)
+
+    def _get_capacity_rate(self) -> float:
+        """Get capacity rate in MYR/kWh."""
+        tariffs = self._get_stored_tariffs()
+        shared = tariffs.get("shared", {})
+        return shared.get("capacity", 0.0455)
+
+    def _get_network_rate(self) -> float:
+        """Get network rate in MYR/kWh."""
+        tariffs = self._get_stored_tariffs()
+        shared = tariffs.get("shared", {})
+        return shared.get("network", 0.1285)
+
+    def _get_retailing_charge(self) -> float:
+        """Get retailing charge in MYR."""
+        tariffs = self._get_stored_tariffs()
+        shared = tariffs.get("shared", {})
+        return shared.get("retailing", DEFAULT_RETAILING_CHARGE)
+
+    def _get_ict_rate_from_stored(self, import_kwh: float, use_tou_logic: bool = True) -> Optional[float]:
+        """Get ICT rate from stored tiers if available.
+        
+        Args:
+            import_kwh: Total import kWh for tier lookup
+            use_tou_logic: If True, uses >= logic (ToU). If False, uses <= logic (non-ToU).
+            
+        Returns:
+            ICT rate in MYR/kWh, or None if no stored tiers available.
+        """
+        tariffs = self._get_stored_tariffs()
+        ict_tiers = tariffs.get("ict_tiers", [])
+        
+        if not ict_tiers:
+            return None
+        
+        # Sort tiers by min_kwh
+        sorted_tiers = sorted(ict_tiers, key=lambda x: x.get("min_kwh", 0))
+        
+        if use_tou_logic:
+            # ToU logic: find highest tier where import_kwh >= min_kwh
+            rate = sorted_tiers[0].get("rate_rm", -0.25)  # Default to first tier
+            for tier in sorted_tiers:
+                if import_kwh >= tier.get("min_kwh", 0):
+                    rate = tier.get("rate_rm", rate)
+            return rate
+        else:
+            # Non-ToU logic: find tier where import_kwh <= max_kwh
+            for tier in sorted_tiers:
+                if import_kwh <= tier.get("max_kwh", float("inf")):
+                    return tier.get("rate_rm", -0.25)
+            # If above all tiers, return 0 (no rebate)
+            return 0.0
+
     def _is_peak_period(self, timestamp: datetime, is_holiday: bool) -> bool:
         """Determine if timestamp falls in peak period based on TNB ToU schedule."""
         if is_holiday:
@@ -1268,7 +1500,16 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         return PEAK_START <= current_time < PEAK_END
 
     def _lookup_ict_rate_tou(self, import_kwh: float) -> float:
-        """Lookup ICT rate for ToU calculation - uses >= logic."""
+        """Lookup ICT rate for ToU calculation - uses >= logic.
+        
+        Uses stored ICT tiers if available, otherwise hardcoded defaults.
+        """
+        # Try stored tiers first
+        stored_rate = self._get_ict_rate_from_stored(import_kwh, use_tou_logic=True)
+        if stored_rate is not None:
+            return stored_rate
+        
+        # Fallback to hardcoded tiers
         tiers = [
             (1, -0.25),
             (201, -0.245),
@@ -1295,7 +1536,16 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         return ict_rate
 
     def _lookup_ict_rate_non_tou(self, import_kwh: float) -> float:
-        """Lookup ICT rate for non-ToU calculation - uses <= logic."""
+        """Lookup ICT rate for non-ToU calculation - uses <= logic.
+        
+        Uses stored ICT tiers if available, otherwise hardcoded defaults.
+        """
+        # Try stored tiers first
+        stored_rate = self._get_ict_rate_from_stored(import_kwh, use_tou_logic=False)
+        if stored_rate is not None:
+            return stored_rate
+        
+        # Fallback to hardcoded tiers
         if import_kwh <= 200:
             return -0.25
         elif import_kwh <= 250:
@@ -1449,33 +1699,31 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         import_offpeak: float,
         export_total: float,
     ) -> Dict[str, Any]:
-        """Calculate ToU-based costs following the template exactly."""
+        """Calculate ToU-based costs following the template exactly.
+        
+        Uses stored tariffs from API if available, otherwise hardcoded defaults.
+        """
         # Derived quantities (Excel: E2,E6,E7)
         import_total = import_peak + import_offpeak
         export_peak = min(import_peak, export_total)
         export_offpeak = export_total - export_peak
         
-        # Effective import energy rates (based on import_total threshold)
-        if import_total < 1500:
-            gen_peak_eff = 0.2852
-            gen_off_eff = 0.2443
-        else:
-            gen_peak_eff = 0.3852
-            gen_off_eff = 0.3443
+        # Effective import energy rates (from stored tariffs or hardcoded)
+        gen_peak_eff, gen_off_eff = self._get_tou_generation_rates(import_total)
         
-        # Fixed rates
-        cap_rate = 0.0455
-        netw_rate = 0.1285
+        # Fixed rates (from stored tariffs or hardcoded)
+        cap_rate = self._get_capacity_rate()
+        netw_rate = self._get_network_rate()
         
         # AFA & Retailing (using tariff overrides or defaults)
         afa_rate = self._get_tariff_rate("afa_rate", DEFAULT_AFA_RATE)
         afa_threshold = DEFAULT_AFA_THRESHOLD  # Future: can also be overridable
-        retailing_charge = DEFAULT_RETAILING_CHARGE  # Future: can also be overridable
+        retailing_charge = self._get_retailing_charge()
         
         afa = 0.0 if import_total < afa_threshold else import_total * afa_rate
         retailing = retailing_charge if import_total > afa_threshold else 0.0
         
-        # ICT lookup
+        # ICT lookup (uses stored tiers or hardcoded)
         ict_rate = self._lookup_ict_rate_tou(import_total)
         ict_adj = import_total * ict_rate
         
@@ -1493,9 +1741,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         e19_st = (e18_import_charge * 0.08) if import_total > 600 else 0.0
         e20_kw = (e18_import_charge * 0.016) if import_total > 300 else 0.0
         
-        # NEM rebate lines use base energy rates
-        nem_peak_rate = 0.2852
-        nem_off_rate = 0.2443
+        # NEM rebate lines use tier1 base energy rates (always lowest tier for export credits)
+        nem_peak_rate, nem_off_rate = self._get_tou_generation_rates(0)  # tier1 rates
         e23_nem_peak = -export_peak * nem_peak_rate
         e24_nem_off = -export_offpeak * nem_off_rate
         e25_nem_cap = -export_total * cap_rate
@@ -1542,25 +1789,34 @@ class TNBDataCoordinator(DataUpdateCoordinator):
     def _calculate_non_tou_costs(
         self, import_kwh: float, export_kwh: float
     ) -> Dict[str, Any]:
-        """Calculate non-ToU-based costs following the template exactly."""
-        # ICT Rate calculation
+        """Calculate non-ToU-based costs following the template exactly.
+        
+        Uses stored tariffs from API if available, otherwise hardcoded defaults.
+        """
+        # Get rates from stored tariffs or hardcoded defaults
+        gen_rate = self._get_non_tou_generation_rate()
+        cap_rate = self._get_capacity_rate()
+        netw_rate = self._get_network_rate()
+        retailing_charge = self._get_retailing_charge()
+        
+        # ICT Rate calculation (uses stored tiers or hardcoded)
         ict_rate = self._lookup_ict_rate_non_tou(import_kwh)
         
         # Import calculation - First tier (up to 600 kWh)
         import_tier1 = min(import_kwh, 600)
-        import_caj_tier1 = import_tier1 * 0.2703
-        import_capacity_tier1 = import_tier1 * 0.0455
-        import_network_tier1 = import_tier1 * 0.1285
+        import_caj_tier1 = import_tier1 * gen_rate
+        import_capacity_tier1 = import_tier1 * cap_rate
+        import_network_tier1 = import_tier1 * netw_rate
         import_runcit_tier1 = 0
         import_ict_tier1 = import_tier1 * ict_rate
         import_kwtbb_tier1 = (import_caj_tier1 + import_capacity_tier1 + import_network_tier1 + import_ict_tier1) * 0.016
         
         # Import calculation - Second tier (excess over 600 kWh)
         import_tier2 = max(import_kwh - 600, 0)
-        import_caj_tier2 = import_tier2 * 0.2703
-        import_capacity_tier2 = import_tier2 * 0.0455
-        import_network_tier2 = import_tier2 * 0.1285
-        import_runcit_tier2 = 10 if import_tier2 > 0 else 0
+        import_caj_tier2 = import_tier2 * gen_rate
+        import_capacity_tier2 = import_tier2 * cap_rate
+        import_network_tier2 = import_tier2 * netw_rate
+        import_runcit_tier2 = retailing_charge if import_tier2 > 0 else 0
         import_ict_tier2 = import_tier2 * ict_rate
         import_kwtbb_tier2 = (import_caj_tier2 + import_capacity_tier2 + import_network_tier2 + import_ict_tier2) * 0.016
         import_service_tax = (import_caj_tier2 + import_capacity_tier2 + import_network_tier2 + import_runcit_tier2 + import_ict_tier2) * 0.08
@@ -1577,9 +1833,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         total_import = total_import_caj + total_import_capacity + total_import_network + total_import_runcit + total_import_ict + total_import_kwtbb + total_import_service_tax
         
         # Export calculation (credits)
-        export_caj = export_kwh * -0.2703
-        export_capacity = export_kwh * -0.0455
-        export_network = export_kwh * -0.1285
+        export_caj = export_kwh * -gen_rate
+        export_capacity = export_kwh * -cap_rate
+        export_network = export_kwh * -netw_rate
         export_ict = export_kwh * -ict_rate
         
         total_export = export_caj + export_capacity + export_network + export_ict
@@ -1591,9 +1847,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             "total_cost": self._round_currency(subtotal),
             "peak_cost": self._round_currency(0.0),
             "off_peak_cost": self._round_currency(total_import_caj),
-            "rate_import": 0.2703,  # Generation rate for non-ToU
-            "rate_capacity": 0.0455,
-            "rate_network": 0.1285,
+            "rate_import": gen_rate,
+            "rate_capacity": cap_rate,
+            "rate_network": netw_rate,
             "rate_ict": ict_rate,
         }
 
@@ -1761,7 +2017,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "4.1.1",
+            "sw_version": "4.2.0",
         }
 
     @property
