@@ -55,6 +55,7 @@ from .const import (
     TARIFF_API_TIMEOUT,
     # Auto-fetch constants
     AUTO_FETCH_API_URL,
+    AFA_AUTO_FETCH_API_URL,
     AUTO_FETCH_ENABLED_KEY,
 )
 
@@ -100,7 +101,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="4.3.2",
+        sw_version="4.3.3",
     )
 
     sensors = [
@@ -385,6 +386,64 @@ class TNBDataCoordinator(DataUpdateCoordinator):
 
             # Load stored data (force reload to pick up calibration changes)
             await self._load_monthly_data(force_reload=True)
+
+            # If AFA source is API (simple endpoint) and full auto-fetch is disabled,
+            # refresh AFA-only rate from /afa/simple at most once per week.
+            if not self._auto_fetch_enabled and self._tariff_overrides.get("source") == TARIFF_SOURCE_API:
+                last_updated_str = self._tariff_overrides.get("last_updated")
+                afa_should_refresh = False
+                if not last_updated_str:
+                    afa_should_refresh = True
+                else:
+                    try:
+                        last_updated_dt = dt_util.parse_datetime(last_updated_str)
+                        if last_updated_dt is None:
+                            afa_should_refresh = True
+                        else:
+                            if now - last_updated_dt >= timedelta(days=7):
+                                afa_should_refresh = True
+                    except Exception:  # pragma: no cover - defensive
+                        afa_should_refresh = True
+
+                if afa_should_refresh:
+                    _LOGGER.info(
+                        "AFA rate source is API and value is stale or missing - "
+                        "refreshing from /afa/simple (weekly interval)"
+                    )
+                    success = await self.async_fetch_afa_rate(api_url=AFA_AUTO_FETCH_API_URL)
+                    if not success:
+                        _LOGGER.warning(
+                            "Weekly AFA auto-fetch refresh failed - keeping existing AFA rate"
+                        )
+
+            # If auto-fetch is enabled, refresh full tariffs from /complete at most once per week
+            if self._auto_fetch_enabled:
+                last_updated_str = self._tariff_overrides.get("last_updated")
+                should_refresh = False
+                if not last_updated_str:
+                    should_refresh = True
+                else:
+                    try:
+                        last_updated_dt = dt_util.parse_datetime(last_updated_str)
+                        if last_updated_dt is None:
+                            should_refresh = True
+                        else:
+                            # Refresh if more than 7 days have passed since last update
+                            if now - last_updated_dt >= timedelta(days=7):
+                                should_refresh = True
+                    except Exception:  # pragma: no cover - defensive
+                        should_refresh = True
+
+                if should_refresh:
+                    _LOGGER.info(
+                        "Auto-fetch is enabled and tariffs are stale or missing - "
+                        "refreshing from API (weekly interval)"
+                    )
+                    success = await self.async_toggle_auto_fetch(enabled=True)
+                    if not success:
+                        _LOGGER.warning(
+                            "Weekly auto-fetch refresh failed - keeping existing tariffs"
+                        )
 
             import_total = self._get_entity_state(self._import_entity, "Import entity", is_optional=False)
             export_total = self._get_entity_state(self._export_entity, "Export entity", is_optional=True)
@@ -2107,7 +2166,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "4.3.2",
+            "sw_version": "4.3.3",
         }
 
     @property
