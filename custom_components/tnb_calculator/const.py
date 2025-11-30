@@ -21,7 +21,7 @@ CONF_CALENDARIFIC_API_KEY = "calendarific_api_key"
 CONF_COUNTRY = "country"
 CONF_YEAR = "year"
 CONF_BILLING_START_DAY = "billing_start_day"
-CONF_VERSION = "4.2.0"
+CONF_VERSION = "4.3.0"
 
 # Tariff defaults (can be overridden via service)
 DEFAULT_AFA_RATE = 0.0145          # RM/kWh for usage >= 600 kWh
@@ -38,6 +38,10 @@ TARIFF_SOURCE_WEBHOOK = "webhook"
 CONF_TARIFF_API_URL = "tariff_api_url"
 DEFAULT_TARIFF_API_URL = None  # No default - user must configure
 TARIFF_API_TIMEOUT = 10  # seconds
+
+# Auto-fetch tariff configuration (experimental)
+AUTO_FETCH_API_URL = "https://tnb.cikgusaleh.work/complete"
+AUTO_FETCH_ENABLED_KEY = "auto_fetch_enabled"
 
 # Webhook configuration
 WEBHOOK_ID = "tnb_calculator_tariff_webhook"

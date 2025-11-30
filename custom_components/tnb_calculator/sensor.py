@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional, Tuple
 import voluptuous as vol
 
 from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity
+from homeassistant.components.switch import SwitchEntity
 from homeassistant.components.number import NumberEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -53,6 +54,9 @@ from .const import (
     TARIFF_SOURCE_WEBHOOK,
     CONF_TARIFF_API_URL,
     TARIFF_API_TIMEOUT,
+    # Auto-fetch constants
+    AUTO_FETCH_API_URL,
+    AUTO_FETCH_ENABLED_KEY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -97,7 +101,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="4.2.0",
+        sw_version="4.3.0",
     )
 
     sensors = [
@@ -129,8 +133,20 @@ async def async_setup_entry(
         device.id,
     )
     sensors.append(billing_day_status)
+    
+    # Add auto-fetch tariffs switch (experimental)
+    auto_fetch_switch = TNBAutoFetchSwitch(
+        coordinator,
+        config_entry,
+    )
+    sensors.append(auto_fetch_switch)
 
     async_add_entities(sensors)
+    
+    # If auto-fetch was enabled before restart, re-fetch from API
+    if coordinator.auto_fetch_enabled:
+        _LOGGER.info("Auto-fetch was enabled - refreshing tariffs from API")
+        await coordinator.async_toggle_auto_fetch(enabled=True)
 
 
 class TNBDataCoordinator(DataUpdateCoordinator):
@@ -191,6 +207,10 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             "source": TARIFF_SOURCE_DEFAULT,
             "last_updated": None,
         }
+        
+        # Auto-fetch tariffs state (experimental feature)
+        self._auto_fetch_enabled: bool = False
+        self._auto_fetch_last_error: Optional[str] = None
 
     async def _load_monthly_data(self, force_reload: bool = False) -> None:
         """Load monthly data from storage."""
@@ -293,13 +313,21 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             if stored_tariff:
                 self._tariff_overrides = {
                     "afa_rate": stored_tariff.get("afa_rate"),
+                    "tariffs": stored_tariff.get("tariffs"),
                     "source": stored_tariff.get("source", TARIFF_SOURCE_DEFAULT),
                     "last_updated": stored_tariff.get("last_updated"),
+                    "effective_date": stored_tariff.get("effective_date"),
+                    "api_url": stored_tariff.get("api_url"),
                 }
                 if self._tariff_overrides.get("afa_rate") is not None:
                     _LOGGER.debug("Loaded tariff override - AFA rate: %s (source: %s)", 
                                  self._tariff_overrides["afa_rate"],
                                  self._tariff_overrides["source"])
+            
+            # Load auto-fetch state
+            self._auto_fetch_enabled = stored_data.get(AUTO_FETCH_ENABLED_KEY, False)
+            if self._auto_fetch_enabled:
+                _LOGGER.info("Auto-fetch tariffs is enabled - will fetch from API on startup")
         else:
             self._holiday_cache = {}
             self._last_holiday_fetch = None
@@ -320,6 +348,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 "historical_months": getattr(self, "_historical_months", {}),
                 "daily_data": getattr(self, "_daily_data", {}),
                 "tariff_overrides": getattr(self, "_tariff_overrides", {}),
+                AUTO_FETCH_ENABLED_KEY: getattr(self, "_auto_fetch_enabled", False),
             }
             await self._store.async_save(storage_data)
             _LOGGER.debug("Saved data to storage: monthly + daily + %d holidays + %d historical months", 
@@ -1143,6 +1172,75 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         except Exception as ex:
             _LOGGER.error("Failed to fetch all rates from API: %s", ex)
             return False
+
+    async def async_toggle_auto_fetch(self, enabled: bool) -> bool:
+        """Toggle auto-fetch tariffs feature.
+        
+        When enabled: Fetches all rates from AUTO_FETCH_API_URL and uses API data.
+        When disabled: Resets ALL tariff overrides to hardcoded defaults.
+        
+        Args:
+            enabled: True to enable auto-fetch (use API rates), False to disable (use hardcoded)
+            
+        Returns:
+            True if operation was successful, False otherwise
+        """
+        if enabled:
+            # Fetch all rates from the hardcoded API URL
+            _LOGGER.info("Auto-fetch enabled - fetching tariffs from %s", AUTO_FETCH_API_URL)
+            self._auto_fetch_last_error = None
+            
+            success = await self.async_fetch_all_rates(api_url=AUTO_FETCH_API_URL)
+            
+            if success:
+                self._auto_fetch_enabled = True
+                _LOGGER.info(
+                    "Auto-fetch tariffs enabled successfully - using live TNB rates from API"
+                )
+                await self._save_monthly_data()
+                return True
+            else:
+                self._auto_fetch_last_error = "Failed to fetch rates from API"
+                _LOGGER.error(
+                    "Auto-fetch failed - keeping current rates. Error: %s",
+                    self._auto_fetch_last_error
+                )
+                return False
+        else:
+            # Disable auto-fetch and reset ALL tariff overrides
+            _LOGGER.info("Auto-fetch disabled - resetting all tariff rates to hardcoded defaults")
+            
+            self._auto_fetch_enabled = False
+            self._auto_fetch_last_error = None
+            
+            # Reset ALL tariff overrides (including AFA)
+            self._tariff_overrides = {
+                "afa_rate": None,       # Will use DEFAULT_AFA_RATE
+                "tariffs": None,        # Will use hardcoded values
+                "source": TARIFF_SOURCE_DEFAULT,
+                "last_updated": dt_util.now().isoformat(),
+                "effective_date": None,
+                "api_url": None,
+            }
+            
+            _LOGGER.info(
+                "All tariff rates reset to hardcoded defaults (AFA: %.4f MYR/kWh)",
+                DEFAULT_AFA_RATE
+            )
+            
+            await self._save_monthly_data()
+            await self.async_refresh()
+            return True
+
+    @property
+    def auto_fetch_enabled(self) -> bool:
+        """Return whether auto-fetch is enabled."""
+        return self._auto_fetch_enabled
+
+    @property
+    def auto_fetch_last_error(self) -> Optional[str]:
+        """Return the last auto-fetch error message, if any."""
+        return self._auto_fetch_last_error
 
     async def async_update_tariff_from_webhook(self, data: Dict[str, Any]) -> bool:
         """Update tariff rates from webhook payload.
@@ -2017,7 +2115,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "4.2.0",
+            "sw_version": "4.3.0",
         }
 
     @property
@@ -2210,4 +2308,98 @@ class TNBBillingStartDayStatusSensor(CoordinatorEntity, SensorEntity):
         if pending is not None:
             attrs["billing_start_day_pending"] = pending
             attrs["note"] = f"Will switch to {pending} next billing cycle"
+        return attrs
+
+
+class TNBAutoFetchSwitch(CoordinatorEntity, SwitchEntity):
+    """Switch entity to toggle auto-fetch tariffs from API (Experimental).
+    
+    When ON: Fetches all tariff rates from the external API and uses them.
+    When OFF: Resets ALL rates (including AFA) to hardcoded defaults.
+    
+    ⚠️ WARNING: This is an experimental feature.
+    - When turning OFF, AFA rate will also be reset to default.
+    - Monitor calculated rates for accuracy when enabled.
+    """
+
+    _attr_icon = "mdi:cloud-sync"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(
+        self,
+        coordinator: TNBDataCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Initialize the auto-fetch switch."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._attr_name = f"{DEFAULT_NAME} Auto Fetch Tariffs (Experimental)"
+        self._attr_unique_id = f"{config_entry.entry_id}_auto_fetch_tariffs"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, config_entry.entry_id)},
+        }
+
+    @property
+    def is_on(self) -> bool:
+        """Return True if auto-fetch is enabled."""
+        return self.coordinator.auto_fetch_enabled
+
+    @property
+    def icon(self) -> str:
+        """Return icon based on state."""
+        if self.is_on:
+            return "mdi:cloud-sync"
+        return "mdi:cloud-off-outline"
+
+    async def async_turn_on(self, **kwargs) -> None:
+        """Turn on auto-fetch - fetches rates from API."""
+        success = await self.coordinator.async_toggle_auto_fetch(enabled=True)
+        if not success:
+            # The toggle failed, so state remains unchanged
+            _LOGGER.warning("Failed to enable auto-fetch tariffs")
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        """Turn off auto-fetch - resets all rates to hardcoded defaults."""
+        await self.coordinator.async_toggle_auto_fetch(enabled=False)
+        self.async_write_ha_state()
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return extra state attributes with warnings and status info."""
+        attrs: Dict[str, Any] = {
+            "tariff_source": self.coordinator._tariff_overrides.get("source", TARIFF_SOURCE_DEFAULT),
+        }
+        
+        if self.is_on:
+            # Show warning when enabled
+            attrs["warning"] = "⚠️ Experimental: Monitor calculated rates for accuracy"
+            attrs["api_url"] = AUTO_FETCH_API_URL
+            attrs["last_updated"] = self.coordinator._tariff_overrides.get("last_updated")
+            attrs["effective_date"] = self.coordinator._tariff_overrides.get("effective_date")
+            
+            # Show current rates from API
+            afa = self.coordinator._tariff_overrides.get("afa_rate")
+            if afa is not None:
+                attrs["afa_rate_myr"] = afa
+            
+            tariffs = self.coordinator._tariff_overrides.get("tariffs")
+            if tariffs:
+                shared = tariffs.get("shared", {})
+                attrs["capacity_rate"] = shared.get("capacity")
+                attrs["network_rate"] = shared.get("network")
+                attrs["retailing_charge"] = shared.get("retailing")
+        else:
+            # Show info when disabled
+            attrs["info"] = "Using hardcoded default rates"
+            attrs["default_afa_rate"] = DEFAULT_AFA_RATE
+            attrs["default_capacity_rate"] = 0.0455
+            attrs["default_network_rate"] = 0.1285
+            attrs["default_retailing_charge"] = DEFAULT_RETAILING_CHARGE
+        
+        # Show error if any
+        error = self.coordinator.auto_fetch_last_error
+        if error:
+            attrs["last_error"] = error
+        
         return attrs
