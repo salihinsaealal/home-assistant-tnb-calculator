@@ -246,7 +246,7 @@ set_afa_rate:
         number:
           min: 0
           max: 1
-          step: 0.0001
+          step: "any"
           mode: box
           unit_of_measurement: "MYR/kWh"
 
