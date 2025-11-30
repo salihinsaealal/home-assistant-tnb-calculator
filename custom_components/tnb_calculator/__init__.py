@@ -142,7 +142,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             
             # Log the comparison
             _LOGGER.info(
-                "Bill Comparison - Actual: RM %.2f, Calculated: RM %.2f, Difference: RM %.2f (%.1f%%)",
+                "Bill Comparison - Actual: MYR %.2f, Calculated: MYR %.2f, Difference: MYR %.2f (%.1f%%)",
                 actual_bill, calculated_cost, difference, percentage_diff
             )
             
@@ -154,9 +154,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     "title": "TNB Bill Comparison",
                     "message": f"""**Bill Comparison Results**
 
-Actual Bill: RM {actual_bill:.2f}
-Calculated: RM {calculated_cost:.2f}
-Difference: RM {difference:.2f} ({percentage_diff:+.1f}%)
+Actual Bill: MYR {actual_bill:.2f}
+Calculated: MYR {calculated_cost:.2f}
+Difference: MYR {difference:.2f} ({percentage_diff:+.1f}%)
 
 {"✅ Calculation is accurate!" if abs(percentage_diff) < 5 else "⚠️ Significant difference detected"}
 

@@ -24,9 +24,9 @@ CONF_BILLING_START_DAY = "billing_start_day"
 CONF_VERSION = "4.3.0"
 
 # Tariff defaults (can be overridden via service)
-DEFAULT_AFA_RATE = 0.0145          # RM/kWh for usage >= 600 kWh
+DEFAULT_AFA_RATE = 0.0145          # MYR/kWh for usage >= 600 kWh
 DEFAULT_AFA_THRESHOLD = 600        # kWh threshold for AFA
-DEFAULT_RETAILING_CHARGE = 10.0    # RM fixed charge for usage > 600 kWh
+DEFAULT_RETAILING_CHARGE = 10.0    # MYR fixed charge for usage > 600 kWh
 
 # Tariff source types
 TARIFF_SOURCE_DEFAULT = "default"
@@ -304,25 +304,25 @@ BASE_SENSOR_TYPES = {
     # Rate sensors (always visible)
     "rate_import": {
         "name": "Import Rate",
-        "unit": "RM/kWh",
+        "unit": "MYR/kWh",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "rate_capacity": {
         "name": "Capacity Rate",
-        "unit": "RM/kWh",
+        "unit": "MYR/kWh",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "rate_network": {
         "name": "Network Rate",
-        "unit": "RM/kWh",
+        "unit": "MYR/kWh",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "rate_ict": {
         "name": "ICT Rate",
-        "unit": "RM/kWh",
+        "unit": "MYR/kWh",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
@@ -448,32 +448,32 @@ TOU_SENSOR_TYPES = {
     # ToU-specific rates (diagnostic - hidden by default)
     "rate_generation_peak": {
         "name": "Generation Peak Rate",
-        "unit": "RM/kWh",
+        "unit": "MYR/kWh",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "rate_generation_offpeak": {
         "name": "Generation Off Peak Rate",
-        "unit": "RM/kWh",
+        "unit": "MYR/kWh",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "rate_nem_peak": {
         "name": "NEM Peak Rate",
-        "unit": "RM/kWh",
+        "unit": "MYR/kWh",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "rate_nem_offpeak": {
         "name": "NEM Offpeak Rate",
-        "unit": "RM/kWh",
+        "unit": "MYR/kWh",
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
     # Tariff override sensors
     "rate_afa": {
         "name": "AFA Rate",
-        "unit": "RM/kWh",
+        "unit": "MYR/kWh",
         "device_class": None,
         "state_class": "measurement",
         "entity_category": EntityCategory.DIAGNOSTIC,

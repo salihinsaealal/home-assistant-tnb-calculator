@@ -18,19 +18,62 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
+## ⭐ What's New in v4.3.2
+
+### 🧮 Dynamic Tariffs from Scraper (Complete API)
+
+- **Full tariff table from API**: Integration can now consume the `/complete` endpoint from the external scraper (`https://tnb.cikgusaleh.work/complete`) and store:
+  - AFA (current + periods)
+  - ToU generation (peak/off-peak, tiers)
+  - Non-ToU generation
+  - Capacity & Network charges
+  - Retailing charge
+  - ICT tiers (16 levels)
+- **Stored tariffs wired into calculations**:
+  - `_calculate_tou_costs` and `_calculate_non_tou_costs` now use stored tariffs when available.
+  - If no API data is present, integration safely falls back to the original hardcoded tariffs.
+
+### 🔘 Auto Fetch Tariffs Switch (Experimental)
+
+- New switch entity: `switch.tnb_calculator_auto_fetch_tariffs`.
+- **OFF (default)**: Uses hardcoded tariff values (exactly like older versions).
+- **ON**:
+  - Fetches all tariffs from the scraper `/complete` endpoint.
+  - Stores them in persistent storage.
+  - All cost calculations use live TNB tariffs from the API.
+- Turning **OFF** again:
+  - Resets **all** tariff overrides (including AFA) back to hardcoded defaults.
+  - Ensures a clean, known-good baseline if anything looks wrong.
+
+### 💱 Proper Currency Handling (MYR)
+
+- All cost sensors now use:
+  - `unit_of_measurement: "MYR"`
+  - `device_class: "monetary"`
+- All rate sensors use `MYR/kWh` instead of `RM/kWh`.
+- This matches ISO-4217 and allows Home Assistant to correctly detect monetary sensors.
+
+### 🔄 Refined AFA Services
+
+- `set_tariff_rates` / `fetch_tariff_rates` have been split and clarified into:
+  - `set_afa_rate`: manual AFA override (positive `MYR/kWh`).
+  - `fetch_afa_rate`: fetch AFA only from `/afa/simple`.
+  - `fetch_all_rates`: fetch full tariff table from `/complete`.
+- Reset service updated to `reset_tariff_rates` to reset **all** tariffs (not just AFA).
+
 ## ⭐ What's New in v4.1.1
 
 ### 🔄 Dynamic AFA Rate Management (API & Scraper Ready)
 
-- **Configurable AFA Rate**: AFA (Additional Fuel Adjustment) rate is now fully configurable via services and stored in persistent storage.
+- **Configurable AFA Rate**: AFA (Additional Fuel Adjustment) rate is configurable via services and stored in persistent storage.
 - **Multiple Sources**: AFA rate can come from:
   - **Default** hard-coded tariff
-  - **Manual override** via `set_tariff_rates` service
-  - **Remote API** via `fetch_tariff_rates` service
+  - **Manual override** via `set_tariff_rates` service (superseded by `set_afa_rate` in v4.3.x)
+  - **Remote API** via `fetch_tariff_rates` service (superseded by `fetch_afa_rate` / `fetch_all_rates`)
   - **Webhook** updates (future integrations)
-- **Diagnostic Sensors**: New sensors expose the current AFA rate, source, and last updated time for easier monitoring.
+- **Diagnostic Sensors**: Sensors expose the current AFA rate, source, and last updated time for easier monitoring.
 - **External Scraper Support**: Optional `tnb-afa-scraper` (FastAPI + Playwright) service to automatically scrape TNB's AFA table and return a ready-to-use `afa_rate`.
-- **Automation Blueprint**: Bundle includes `auto_update_afa_rate` automation blueprint to call `tnb_calculator.fetch_tariff_rates` monthly using the scraper URL.
+- **Automation Blueprint**: Bundle includes an automation blueprint to call the AFA fetch service monthly using the scraper URL.
 - **Positive AFA Rate Handling**: Scraper normalizes TNB's negative rebate values to a positive `afa_rate` so existing cost calculations remain correct.
 
 ## ⭐ What's New in v4.0.0
@@ -68,7 +111,7 @@ Compare the calculated bill with your actual TNB invoice and receive a persisten
 ```yaml
 service: tnb_calculator.compare_with_bill
 data:
-  actual_bill: 156.50  # RM amount from your bill
+  actual_bill: 156.50  # MYR amount from your bill
   month: 10            # Optional: billing month (1-12)
   year: 2025           # Optional: billing year
 ```
@@ -241,7 +284,7 @@ After setup, these sensors will be created:
 
 ### Smart Predictions
 - **Cost Trend Method**: Direct cost averaging - `(current_cost / days_elapsed) × days_in_month`
-  - Example: RM 3.00 over 4 days = RM 0.75/day × 30 = RM 22.50 ± 5%
+  - Example: MYR 3.00 over 4 days = MYR 0.75/day × 30 = MYR 22.50 ± 5%
   - More accurate than kWh projection, especially early in the month
 - **Hybrid Method**: Weighted combination of cost trend + historical average (when 2+ months of data available)
   - Early month (days 1-7): 30% trend, 70% history
@@ -353,5 +396,7 @@ This integration is open source. Feel free to modify and share.
 
 ## Version History
 
+- v4.3.2: Dynamic full-tariff loading from scraper `/complete`, auto-fetch switch, and MYR currency standardisation
 - v4.1.1: Dynamic AFA rate management, external scraper support, and automation blueprint for automatic AFA updates
+- v4.0.0: Configuration & calibration overhaul, billing start day helpers
 - v1.0.0: Initial release with non-ToU and ToU support

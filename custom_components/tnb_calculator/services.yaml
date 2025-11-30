@@ -4,7 +4,7 @@ compare_with_bill:
   fields:
     actual_bill:
       name: Actual Bill Amount
-      description: Your actual TNB bill amount in RM
+      description: Your actual TNB bill amount in MYR
       required: true
       example: 156.50
       selector:
