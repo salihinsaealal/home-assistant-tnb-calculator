@@ -101,7 +101,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="4.3.3",
+        sw_version="4.3.4",
     )
 
     sensors = [
@@ -406,11 +406,18 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                         afa_should_refresh = True
 
                 if afa_should_refresh:
+                    # Priority: configured URL > last-used URL > hardcoded fallback
+                    afa_api_url = (
+                        self._tariff_api_url
+                        or self._tariff_overrides.get("api_url")
+                        or AFA_AUTO_FETCH_API_URL
+                    )
                     _LOGGER.info(
                         "AFA rate source is API and value is stale or missing - "
-                        "refreshing from /afa/simple (weekly interval)"
+                        "refreshing from %s (weekly interval)",
+                        afa_api_url
                     )
-                    success = await self.async_fetch_afa_rate(api_url=AFA_AUTO_FETCH_API_URL)
+                    success = await self.async_fetch_afa_rate(api_url=afa_api_url)
                     if not success:
                         _LOGGER.warning(
                             "Weekly AFA auto-fetch refresh failed - keeping existing AFA rate"
@@ -2166,7 +2173,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "4.3.3",
+            "sw_version": "4.3.4",
         }
 
     @property
