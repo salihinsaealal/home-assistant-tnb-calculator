@@ -18,6 +18,25 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
+## ⭐ What's New in v4.3.4
+
+### 🔁 Weekly Auto-Fetch & AFA API URL
+
+- **Weekly AFA-only auto-refresh**:
+  - When AFA source is `api` and the full-tariff auto-fetch switch is **OFF**, the integration re-fetches the AFA rate at most **once per week**.
+  - URL priority:
+    1. Integration option `tariff_api_url` (configured in the UI).
+    2. Last-used URL stored in `_tariff_overrides["api_url"]`.
+    3. Default fallback: `https://tnb.cikgusaleh.work/afa/simple`.
+  - Failures are logged but the previous AFA rate is kept.
+- **Weekly full-tariff auto-refresh** (recap):
+  - When `switch.tnb_calculator_auto_fetch_tariffs` is ON, tariffs from `/complete` are refreshed at most once per week.
+  - When OFF, integration uses hardcoded tariffs.
+- **New AFA API URL entity**:
+  - Entity: `text.tnb_calculator_afa_api_url`.
+  - Lets you view/edit the AFA API URL directly in Home Assistant.
+  - Attributes show `current_url`, `default_url`, and `effective_url`.
+
 ## ⭐ What's New in v4.3.2
 
 ### 🧮 Dynamic Tariffs from Scraper (Complete API)
@@ -396,6 +415,7 @@ This integration is open source. Feel free to modify and share.
 
 ## Version History
 
+- v4.3.4: Weekly AFA-only and full-tariff auto-fetch improvements, configurable AFA API URL entity
 - v4.3.2: Dynamic full-tariff loading from scraper `/complete`, auto-fetch switch, and MYR currency standardisation
 - v4.1.1: Dynamic AFA rate management, external scraper support, and automation blueprint for automatic AFA updates
 - v4.0.0: Configuration & calibration overhaul, billing start day helpers
