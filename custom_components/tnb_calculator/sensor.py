@@ -407,11 +407,20 @@ class TNBDataCoordinator(DataUpdateCoordinator):
 
                 if afa_should_refresh:
                     # Priority: configured URL > last-used URL > hardcoded fallback
-                    afa_api_url = (
-                        self._tariff_api_url
-                        or self._tariff_overrides.get("api_url")
-                        or AFA_AUTO_FETCH_API_URL
-                    )
+                    base_url = self._tariff_api_url or self._tariff_overrides.get("api_url")
+                    if base_url:
+                        # Normalise to AFA simple endpoint: strip known paths, then append /afa/simple
+                        # Handles both .../afa/simple and .../complete sources.
+                        base = (
+                            base_url
+                            .replace("/afa/simple", "")
+                            .replace("/complete", "")
+                            .rstrip("/")
+                        )
+                        afa_api_url = f"{base}/afa/simple"
+                    else:
+                        afa_api_url = AFA_AUTO_FETCH_API_URL
+
                     _LOGGER.info(
                         "AFA rate source is API and value is stale or missing - "
                         "refreshing from %s (weekly interval)",

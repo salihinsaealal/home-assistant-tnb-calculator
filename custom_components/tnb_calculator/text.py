@@ -71,8 +71,16 @@ class TNBAFAApiUrlText(CoordinatorEntity, TextEntity):
     @property
     def native_value(self) -> str:
         """Return the current AFA API URL."""
-        # Priority: stored api_url > empty (shows placeholder in UI)
-        url = self.coordinator._tariff_overrides.get("api_url") or ""
+        # Show empty by default. Only show a value once an AFA-specific URL has been set.
+        url = self.coordinator._tariff_overrides.get("api_url")
+        if not url:
+            return ""
+
+        # If the stored URL points to a generic or /complete endpoint, hide it in the text box
+        # so the user starts with an empty field.
+        if url.endswith("/complete"):
+            return ""
+
         return url
 
     async def async_set_value(self, value: str) -> None:
