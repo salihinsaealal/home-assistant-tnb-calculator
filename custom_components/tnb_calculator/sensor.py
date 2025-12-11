@@ -101,7 +101,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="4.3.5",
+        sw_version="4.4.0b1",
     )
 
     sensors = [
@@ -607,6 +607,17 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             # Calculate predictions
             prediction_data = self._calculate_predictions(now, monthly_import, monthly_peak, monthly_offpeak, monthly_export)
             result.update(prediction_data)
+            
+            # Calculate optimization sensors (AFA sweet spot analysis)
+            optimization_data = self._calculate_optimization_data()
+            result["ideal_import_kwh"] = optimization_data["ideal_import_kwh"]
+            result["savings_if_ideal_kwh"] = optimization_data["savings_if_ideal_kwh"]
+            result["afa_optimization_savings"] = optimization_data["afa_optimization_savings"]
+            result["afa_weird_zone"] = "on" if optimization_data["afa_weird_zone"] else "off"
+            result["afa_value_zone"] = "on" if optimization_data["afa_value_zone"] else "off"
+            result["afa_explanation"] = optimization_data["afa_explanation"]
+            # Store full optimization data for sensor attributes
+            result["_optimization_data"] = optimization_data
             
             # Add daily usage sensors
             daily_import = self._daily_data.get("import_total", 0.0)
@@ -2152,6 +2163,213 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         
         return predictions
 
+    # =========================================================================
+    # OPTIMIZATION SENSORS - AFA Sweet Spot Analysis
+    # =========================================================================
+
+    def _simulate_bill_for_import(
+        self,
+        target_import_kwh: float,
+        export_kwh: float,
+    ) -> float:
+        """Simulate bill for a hypothetical import kWh.
+        
+        Uses the same calculation logic as the main update cycle,
+        but with a specified import value instead of actual.
+        
+        For ToU mode: assumes current peak/offpeak ratio.
+        For non-ToU mode: uses target_import_kwh directly.
+        
+        Args:
+            target_import_kwh: Hypothetical total import kWh
+            export_kwh: Export kWh (fixed, from actual data)
+            
+        Returns:
+            Total bill in MYR
+        """
+        if self._tou_enabled:
+            # Estimate peak/offpeak split based on current ratio
+            current_peak = self._monthly_data.get("import_peak", 0)
+            current_offpeak = self._monthly_data.get("import_offpeak", 0)
+            current_total = current_peak + current_offpeak
+            
+            if current_total > 0:
+                peak_ratio = current_peak / current_total
+            else:
+                peak_ratio = 0.6  # Default assumption: 60% peak
+            
+            sim_peak = target_import_kwh * peak_ratio
+            sim_offpeak = target_import_kwh * (1 - peak_ratio)
+            
+            result = self._calculate_tou_costs(sim_peak, sim_offpeak, export_kwh)
+        else:
+            result = self._calculate_non_tou_costs(target_import_kwh, export_kwh)
+        
+        return result["total_cost"]
+
+    def _generate_afa_explanation(
+        self,
+        zone: str,
+        current_import: float,
+        cost_now: float,
+        cost_600: float,
+        kwh_to_600: float,
+        afa_savings: float,
+        avg_marginal_rate: Optional[float],
+    ) -> str:
+        """Generate human-readable explanation of AFA optimization situation.
+        
+        Args:
+            zone: "weird", "value", "normal", or "above_threshold"
+            current_import: Current month import kWh
+            cost_now: Bill at current import
+            cost_600: Bill at 600 kWh
+            kwh_to_600: 600 - current_import
+            afa_savings: cost_now - cost_600 (positive = weird zone)
+            avg_marginal_rate: Cost per extra kWh to 600 (if < 600)
+            
+        Returns:
+            Explanation string
+        """
+        if zone == "above_threshold":
+            afa_rate = self._get_tariff_rate("afa_rate", DEFAULT_AFA_RATE)
+            afa_amount = current_import * afa_rate
+            return (
+                f"Already above 600 kWh ({current_import:.0f} kWh). "
+                f"AFA rebate of RM {afa_amount:.2f} is active."
+            )
+        
+        if zone == "weird":
+            return (
+                f"AFA weird zone: {current_import:.0f} kWh = RM {cost_now:.2f}. "
+                f"If 600 kWh: RM {cost_600:.2f}. "
+                f"Extra {kwh_to_600:.0f} kWh could SAVE RM {afa_savings:.2f} due to AFA rebate."
+            )
+        
+        if zone == "value":
+            extra_cost = cost_600 - cost_now
+            rate_str = f"RM {avg_marginal_rate:.2f}/kWh" if avg_marginal_rate else "N/A"
+            return (
+                f"Value opportunity: {current_import:.0f} kWh = RM {cost_now:.2f}. "
+                f"If 600 kWh: RM {cost_600:.2f}. "
+                f"Extra {kwh_to_600:.0f} kWh costs only RM {extra_cost:.2f} ({rate_str} - below normal rates)."
+            )
+        
+        # Normal zone
+        savings = cost_600 - cost_now  # Positive means 600 costs more
+        if avg_marginal_rate is not None and kwh_to_600 > 0:
+            return (
+                f"Normal zone: {current_import:.0f} kWh = RM {cost_now:.2f}. "
+                f"If 600 kWh: RM {cost_600:.2f} (RM {avg_marginal_rate:.2f}/kWh extra). "
+                f"Staying below 600 kWh saves RM {savings:.2f}."
+            )
+        return (
+            f"Current: {current_import:.0f} kWh = RM {cost_now:.2f}. "
+            f"If 600 kWh: RM {cost_600:.2f}."
+        )
+
+    def _calculate_optimization_data(self) -> Dict[str, Any]:
+        """Calculate all optimization sensor data in one pass.
+        
+        Analyzes the current billing cycle to find:
+        - Ideal import kWh (minimum bill point)
+        - Savings if user moves to ideal
+        - AFA weird zone (more usage = lower bill)
+        - AFA value zone (cheap marginal rate to 600)
+        - Human-readable explanation
+        
+        Returns:
+            Dict with keys for all optimization sensors
+        """
+        # Get current month data
+        current_import = self._monthly_data.get("import_total", 0.0)
+        export_total = self._monthly_data.get("export_total", 0.0)
+        
+        # Cost at current import
+        cost_now = self._simulate_bill_for_import(current_import, export_total)
+        
+        # Cost at exactly 600 kWh (AFA threshold)
+        cost_at_600 = self._simulate_bill_for_import(600.0, export_total)
+        
+        # Find ideal import (minimize bill) using search
+        # Search range: 0 to max(current × 1.5, 600, 800)
+        search_max = int(max(current_import * 1.5, 600, 800))
+        ideal_import = 0.0
+        ideal_cost = float('inf')
+        
+        # Use step of 1 kWh for accuracy (still fast: max ~800 iterations)
+        for candidate in range(0, search_max + 1):
+            candidate_cost = self._simulate_bill_for_import(float(candidate), export_total)
+            if candidate_cost < ideal_cost:
+                ideal_cost = candidate_cost
+                ideal_import = float(candidate)
+        
+        # Derived values
+        kwh_to_600 = 600.0 - current_import
+        delta_to_ideal = ideal_import - current_import
+        savings_if_ideal = cost_now - ideal_cost
+        afa_savings = cost_now - cost_at_600  # positive = weird zone
+        
+        # Marginal rate to 600 (cost per extra kWh)
+        if current_import < 600 and kwh_to_600 > 0:
+            avg_marginal_rate = (cost_at_600 - cost_now) / kwh_to_600
+        else:
+            avg_marginal_rate = None
+        
+        # Zone classification
+        EPSILON = 0.10  # MYR - avoid floating point noise
+        VALUE_THRESHOLD = 0.20  # MYR/kWh - "cheap" threshold
+        VALUE_KWH_RANGE = 100  # Only show value zone within 100 kWh of 600
+        
+        if current_import >= 600:
+            zone = "above_threshold"
+            weird_zone = False
+            value_zone = False
+        elif afa_savings > EPSILON:
+            # More usage paradoxically lowers bill
+            zone = "weird"
+            weird_zone = True
+            value_zone = False
+        elif (avg_marginal_rate is not None 
+              and avg_marginal_rate < VALUE_THRESHOLD 
+              and kwh_to_600 <= VALUE_KWH_RANGE):
+            # Extra kWh to 600 is cheap per kWh
+            zone = "value"
+            weird_zone = False
+            value_zone = True
+        else:
+            zone = "normal"
+            weird_zone = False
+            value_zone = False
+        
+        # Generate explanation
+        explanation = self._generate_afa_explanation(
+            zone, current_import, cost_now, cost_at_600,
+            kwh_to_600, afa_savings, avg_marginal_rate
+        )
+        
+        return {
+            # Main sensor values
+            "ideal_import_kwh": self._round_energy(ideal_import),
+            "savings_if_ideal_kwh": self._round_currency(max(savings_if_ideal, 0)),  # Clamp to 0
+            "afa_optimization_savings": self._round_currency(afa_savings),
+            "afa_weird_zone": weird_zone,
+            "afa_value_zone": value_zone,
+            "afa_explanation": explanation,
+            # Attributes
+            "optimization_zone": zone,
+            "current_import_kwh": self._round_energy(current_import),
+            "export_total_kwh": self._round_energy(export_total),
+            "cost_now_myr": self._round_currency(cost_now),
+            "cost_at_600_myr": self._round_currency(cost_at_600),
+            "ideal_cost_myr": self._round_currency(ideal_cost),
+            "kwh_to_600": self._round_energy(kwh_to_600),
+            "delta_to_ideal_kwh": self._round_energy(delta_to_ideal),
+            "avg_marginal_rate": self._round_currency(avg_marginal_rate) if avg_marginal_rate else None,
+            "search_range_max": search_max,
+            "afa_rate": self._get_tariff_rate("afa_rate", DEFAULT_AFA_RATE),
+        }
+
 
 class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
     """TNB Calculator sensor entity."""
@@ -2182,7 +2400,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "4.3.5",
+            "sw_version": "4.4.0b1",
         }
 
     @property
@@ -2254,6 +2472,63 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             value = self.coordinator.data.get("export_total_energy")
             if value is not None:
                 attrs["export_total_energy"] = value
+        
+        # Add optimization sensor attributes
+        optimization_data = self.coordinator.data.get("_optimization_data", {})
+        
+        if self._sensor_type == "ideal_import_kwh":
+            attrs.update({
+                "current_month_import_kwh": optimization_data.get("current_import_kwh"),
+                "delta_to_ideal_kwh": optimization_data.get("delta_to_ideal_kwh"),
+                "estimated_bill_at_current_myr": optimization_data.get("cost_now_myr"),
+                "estimated_bill_at_ideal_myr": optimization_data.get("ideal_cost_myr"),
+                "search_range_max": optimization_data.get("search_range_max"),
+            })
+        
+        if self._sensor_type == "savings_if_ideal_kwh":
+            attrs.update({
+                "current_bill_myr": optimization_data.get("cost_now_myr"),
+                "ideal_bill_myr": optimization_data.get("ideal_cost_myr"),
+                "ideal_import_kwh": optimization_data.get("ideal_import_kwh"),
+                "delta_kwh": optimization_data.get("delta_to_ideal_kwh"),
+            })
+        
+        if self._sensor_type == "afa_optimization_savings":
+            attrs.update({
+                "current_month_import_kwh": optimization_data.get("current_import_kwh"),
+                "kwh_to_600": optimization_data.get("kwh_to_600"),
+                "cost_if_stop_now_myr": optimization_data.get("cost_now_myr"),
+                "cost_if_600kwh_myr": optimization_data.get("cost_at_600_myr"),
+                "avg_marginal_rate_myr_per_kwh": optimization_data.get("avg_marginal_rate"),
+            })
+        
+        if self._sensor_type == "afa_weird_zone":
+            attrs.update({
+                "savings_myr": optimization_data.get("afa_optimization_savings"),
+                "kwh_to_600": optimization_data.get("kwh_to_600"),
+                "current_import_kwh": optimization_data.get("current_import_kwh"),
+            })
+        
+        if self._sensor_type == "afa_value_zone":
+            avg_marginal = optimization_data.get("avg_marginal_rate")
+            cost_now = optimization_data.get("cost_now_myr") or 0
+            cost_600 = optimization_data.get("cost_at_600_myr") or 0
+            attrs.update({
+                "avg_marginal_rate_myr_per_kwh": avg_marginal,
+                "extra_cost_to_600_myr": cost_600 - cost_now if cost_600 > cost_now else 0,
+                "kwh_to_600": optimization_data.get("kwh_to_600"),
+                "value_threshold_myr_per_kwh": 0.20,
+            })
+        
+        if self._sensor_type == "afa_explanation":
+            attrs.update({
+                "zone": optimization_data.get("optimization_zone"),
+                "current_import_kwh": optimization_data.get("current_import_kwh"),
+                "cost_now_myr": optimization_data.get("cost_now_myr"),
+                "cost_600_myr": optimization_data.get("cost_at_600_myr"),
+                "savings_myr": optimization_data.get("afa_optimization_savings"),
+                "afa_rate": optimization_data.get("afa_rate"),
+            })
 
         return attrs
 

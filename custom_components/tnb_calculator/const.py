@@ -21,7 +21,7 @@ CONF_CALENDARIFIC_API_KEY = "calendarific_api_key"
 CONF_COUNTRY = "country"
 CONF_YEAR = "year"
 CONF_BILLING_START_DAY = "billing_start_day"
-CONF_VERSION = "4.3.5"
+CONF_VERSION = "4.4.0b1"
 
 # Tariff defaults (can be overridden via service)
 DEFAULT_AFA_RATE = 0.0145          # MYR/kWh for usage >= 600 kWh
@@ -236,6 +236,55 @@ BASE_SENSOR_TYPES = {
         "device_class": None,
         "state_class": None,
         "entity_category": None,  # Main entity
+    },
+    # Optimization sensors - AFA sweet spot analysis
+    "ideal_import_kwh": {
+        "name": "Ideal Monthly Import",
+        "unit": "kWh",
+        "device_class": "energy",
+        "state_class": "measurement",
+        "entity_category": None,  # Main entity
+        "icon": "mdi:target",
+    },
+    "savings_if_ideal_kwh": {
+        "name": "Savings at Ideal Import",
+        "unit": "MYR",
+        "device_class": "monetary",
+        "state_class": "measurement",
+        "entity_category": None,  # Main entity
+        "icon": "mdi:piggy-bank",
+    },
+    "afa_optimization_savings": {
+        "name": "AFA Optimization Savings",
+        "unit": "MYR",
+        "device_class": "monetary",
+        "state_class": "measurement",
+        "entity_category": None,  # Main entity
+        "icon": "mdi:cash-refund",
+    },
+    "afa_weird_zone": {
+        "name": "AFA Weird Zone",
+        "unit": None,
+        "device_class": None,
+        "state_class": None,
+        "entity_category": None,  # Main entity (for automations)
+        "icon": "mdi:alert-circle",
+    },
+    "afa_value_zone": {
+        "name": "AFA Value Zone",
+        "unit": None,
+        "device_class": None,
+        "state_class": None,
+        "entity_category": None,  # Main entity (for automations)
+        "icon": "mdi:hand-coin",
+    },
+    "afa_explanation": {
+        "name": "AFA Explanation",
+        "unit": None,
+        "device_class": None,
+        "state_class": None,
+        "entity_category": None,  # Main entity
+        "icon": "mdi:information-outline",
     },
     # Diagnostic sensors (health & monitoring)
     "storage_health": {

@@ -125,6 +125,7 @@ examples.md
 HACS_CHECKLIST.md
 CODE_REVIEW_*.md
 RELEASE_NOTES_*.md
+PLANNING_OPTIMIZATION_SENSORS.md
 TNB ToU.xlsx
 dashboards/tnb_calculator_bubble_dashboard.yaml
 dashboards/tnb_calculator_bubble_modern.yaml

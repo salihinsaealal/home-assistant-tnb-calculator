@@ -18,6 +18,33 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
+## ⭐ What's New in v4.4.0b1 (Beta)
+
+### 🎯 AFA Optimization & Sweet-Spot Sensors
+
+- **Ideal Import & Savings**
+  - `sensor.tnb_calculator_ideal_import_kwh`
+    - Shows the **optimal monthly import kWh** (gross import) that gives the **lowest bill**, based on your current tariffs and AFA.
+  - `sensor.tnb_calculator_savings_if_ideal_kwh`
+    - Shows how much **MYR you could save** if you move your usage towards the ideal import.
+- **AFA 600 kWh Threshold Analysis**
+  - `sensor.tnb_calculator_afa_optimization_savings`
+    - Compares **your current bill** vs a hypothetical **600 kWh import** bill.
+    - Positive = going to **600 kWh is cheaper** than stopping now (AFA weird zone).
+  - `binary_sensor.tnb_calculator_afa_weird_zone`
+    - **ON** when **more usage towards 600 kWh actually lowers your bill** because AFA rebate dominates.
+  - `binary_sensor.tnb_calculator_afa_value_zone`
+    - **ON** when stopping now is cheaper overall, but extra kWh up to 600 are **very cheap per kWh** (good value instead of pure jimat).
+  - `sensor.tnb_calculator_afa_explanation`
+    - Human-readable explanation of your current AFA situation:
+      - Normal, Weird zone, Value zone, or Already above 600 kWh.
+    - Includes current import, cost now, cost at 600 kWh and AFA rate.
+
+These sensors are calculated purely from your existing monthly import/export totals and tariff data. They **do not change** your usage; they only help you decide whether to:
+- Keep usage low (pure saving)
+- Increase usage slightly for better value
+- Or intentionally move towards the AFA sweet spot around **600 kWh**.
+
 ## ⭐ What's New in v4.3.5
 
 ### 🔁 Weekly Auto-Fetch & AFA API URL
@@ -421,6 +448,7 @@ This integration is open source. Feel free to modify and share.
 
 ## Version History
 
+- v4.4.0b1: AFA optimization sensors (ideal import, savings, weird/value zones, human-readable explanation) [beta]
 - v4.3.5: State-only energy entity support in config flow (fallback when entity registry entry is missing)
 - v4.3.4: Weekly AFA-only and full-tariff auto-fetch improvements, configurable AFA API URL entity
 - v4.3.2: Dynamic full-tariff loading from scraper `/complete`, auto-fetch switch, and MYR currency standardisation
