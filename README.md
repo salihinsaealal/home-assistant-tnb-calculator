@@ -146,6 +146,7 @@ These sensors are calculated purely from your existing monthly import/export tot
 - **🔧 Service Fixes**: All calibration services now work correctly with proper refresh handling
 - **📊 Better UX**: Pending configuration changes visible in sensor attributes and status displays
 
+</details>
 
 ## Features
 
