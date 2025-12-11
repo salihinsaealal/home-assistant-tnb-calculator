@@ -45,6 +45,9 @@ These sensors are calculated purely from your existing monthly import/export tot
 - Increase usage slightly for better value
 - Or intentionally move towards the AFA sweet spot around **600 kWh**.
 
+<details>
+  <summary><strong>Older release notes</strong></summary>
+
 ## ⭐ What's New in v4.3.5
 
 ### 🔁 Weekly Auto-Fetch & AFA API URL
