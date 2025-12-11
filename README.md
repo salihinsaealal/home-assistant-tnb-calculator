@@ -18,7 +18,7 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v4.4.0b1 (Beta)
+## ⭐ What's New in v4.4.0b2 (Beta)
 
 ### 🎯 AFA Optimization & Sweet-Spot Sensors
 
@@ -391,17 +391,68 @@ entities:
 The layout uses Bubble Card for quick metrics and ApexCharts for energy/cost trends. Buttons at the bottom call `tnb_calculator.compare_with_bill` and `tnb_calculator.reset_storage`.
 
 ### Automations
-Create automations based on your electricity usage:
 
+#### High Bill Alert
 ```yaml
+alias: High Electricity Bill Alert
 trigger:
   - platform: numeric_state
-    entity_id: sensor.tnb_calculator_total_cost
+    entity_id: sensor.tnb_calculator_total_cost_tou
     above: 150
 action:
   - service: notify.mobile_app
     data:
-      message: "Electricity bill is getting high this month"
+      message: "Electricity bill is RM{{ states('sensor.tnb_calculator_total_cost_tou') }} this month"
+```
+
+#### AFA Weird Zone Alert (when more usage saves money)
+```yaml
+alias: AFA Weird Zone Alert
+trigger:
+  - platform: state
+    entity_id: binary_sensor.tnb_calculator_afa_weird_zone
+    to: "on"
+action:
+  - service: notify.mobile_app
+    data:
+      message: >
+        AFA weird zone detected! Using more electricity up to 600 kWh could actually 
+        lower your bill. Current: {{ states('sensor.tnb_calculator_import_energy') }} kWh.
+        Consider shifting some usage to this month.
+```
+
+#### AFA Value Zone Alert (cheap extra kWh)
+```yaml
+alias: AFA Value Zone Alert
+trigger:
+  - platform: state
+    entity_id: binary_sensor.tnb_calculator_afa_value_zone
+    to: "on"
+action:
+  - service: notify.mobile_app
+    data:
+      message: >
+        AFA value opportunity! Extra kWh up to 600 kWh are very cheap 
+        ({{ state_attr('sensor.tnb_calculator_afa_explanation', 'avg_marginal_rate_myr_per_kwh') }} MYR/kWh).
+        Consider running heavy appliances this month.
+```
+
+#### Monthly Bill Summary
+```yaml
+alias: Monthly Electricity Summary
+trigger:
+  - platform: time
+    at: "23:59:59"
+condition:
+  - condition: template
+    value_template: "{{ now().day == 1 }}"
+action:
+  - service: notify.notify
+    data:
+      message: >
+        Last month's electricity bill: RM{{ states('sensor.tnb_calculator_total_cost_tou') }}
+        Total usage: {{ states('sensor.tnb_calculator_import_energy') }} kWh
+        AFA zone: {{ states('sensor.tnb_calculator_afa_explanation') }}
 ```
 
 ## Troubleshooting
@@ -448,6 +499,7 @@ This integration is open source. Feel free to modify and share.
 
 ## Version History
 
+- v4.4.0b2: AFA explanation state cleanup, dashboard section, and automation examples [beta]
 - v4.4.0b1: AFA optimization sensors (ideal import, savings, weird/value zones, human-readable explanation) [beta]
 - v4.3.5: State-only energy entity support in config flow (fallback when entity registry entry is missing)
 - v4.3.4: Weekly AFA-only and full-tariff auto-fetch improvements, configurable AFA API URL entity

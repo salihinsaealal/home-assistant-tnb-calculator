@@ -2,6 +2,30 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [4.4.0b2] - 2025-12-11 (Beta)
+
+### Improved
+- **AFA Explanation Sensor UX**
+  - Sensor state now shows a short zone label (`normal`, `weird`, `value`, `above_threshold`).
+  - Full human-readable explanation moved into an `explanation` attribute.
+  - Keeps the device sensor list clean while retaining detailed guidance for dashboards.
+
+- **Dashboard: AFA Optimization Section**
+  - Added a dedicated card in `dashboards/tnb_calculator_dashboard.yaml` for:
+    - `sensor.tnb_calculator_ideal_import_kwh`
+    - `sensor.tnb_calculator_savings_if_ideal_kwh`
+    - `sensor.tnb_calculator_afa_optimization_savings`
+    - `sensor.tnb_calculator_afa_explanation`
+    - `binary_sensor.tnb_calculator_afa_weird_zone`
+    - `binary_sensor.tnb_calculator_afa_value_zone`
+
+- **Documentation & Automations**
+  - README now documents the AFA optimization sensors and adds example automations for:
+    - High bill alert
+    - AFA weird zone alert
+    - AFA value zone alert
+    - Monthly summary including AFA zone.
+
 ## [4.4.0b1] - 2025-12-11 (Beta)
 
 ### Added

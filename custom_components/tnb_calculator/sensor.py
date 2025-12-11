@@ -101,7 +101,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="4.4.0b1",
+        sw_version="4.4.0b2",
     )
 
     sensors = [
@@ -615,7 +615,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             result["afa_optimization_savings"] = optimization_data["afa_optimization_savings"]
             result["afa_weird_zone"] = "on" if optimization_data["afa_weird_zone"] else "off"
             result["afa_value_zone"] = "on" if optimization_data["afa_value_zone"] else "off"
-            result["afa_explanation"] = optimization_data["afa_explanation"]
+            # For afa_explanation, keep state as short zone label (normal/weird_zone/value_zone/above_threshold)
+            # and expose full human-readable explanation via attributes.
+            result["afa_explanation"] = optimization_data["optimization_zone"]
             # Store full optimization data for sensor attributes
             result["_optimization_data"] = optimization_data
             
@@ -2400,7 +2402,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "4.4.0b1",
+            "sw_version": "4.4.0b2",
         }
 
     @property
@@ -2523,6 +2525,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
         if self._sensor_type == "afa_explanation":
             attrs.update({
                 "zone": optimization_data.get("optimization_zone"),
+                "explanation": optimization_data.get("afa_explanation"),
                 "current_import_kwh": optimization_data.get("current_import_kwh"),
                 "cost_now_myr": optimization_data.get("cost_now_myr"),
                 "cost_600_myr": optimization_data.get("cost_at_600_myr"),

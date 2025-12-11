@@ -22,6 +22,29 @@ views:
             name: Current Tier
             icon: mdi:stairs
       - type: entities
+        title: 🎯 AFA Optimization
+        show_header_toggle: false
+        entities:
+          - entity: sensor.tnb_calculator_ideal_import_kwh
+            name: Ideal Monthly Import
+            icon: mdi:target
+          - entity: sensor.tnb_calculator_savings_if_ideal_kwh
+            name: Savings at Ideal
+            icon: mdi:piggy-bank
+          - entity: sensor.tnb_calculator_afa_optimization_savings
+            name: AFA 600kWh Savings
+            icon: mdi:cash-refund
+          - entity: sensor.tnb_calculator_afa_explanation
+            name: AFA Zone
+            icon: mdi:information-outline
+          - type: divider
+          - entity: binary_sensor.tnb_calculator_afa_weird_zone
+            name: Weird Zone Alert
+            icon: mdi:alert-circle
+          - entity: binary_sensor.tnb_calculator_afa_value_zone
+            name: Value Zone Alert
+            icon: mdi:hand-coin
+      - type: entities
         title: ⚡ Energy Usage
         show_header_toggle: false
         entities:
