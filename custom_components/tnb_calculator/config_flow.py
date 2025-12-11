@@ -38,20 +38,75 @@ async def async_validate_energy_entity(
     *,
     allow_unknown_state: bool = False,
 ) -> Optional[str]:
-    """Validate that the selected entity is a usable energy sensor."""
+    """Validate that the selected entity is a usable energy sensor.
+    
+    Supports two validation paths:
+    1. Registry path (preferred): Entity has a unique_id and is in the entity registry.
+       Full validation using registry metadata + state attributes.
+    2. State-only path (fallback): Entity exists only in hass.states without a registry entry.
+       Relaxed validation using state attributes only. Logs a one-time warning.
+    
+    This allows users with non-registry entities (e.g., template sensors without unique_id)
+    to still use the integration.
+    """
 
     if not entity_id:
         return "entity_not_found"
 
     registry = async_get_entity_registry(hass)
     entry = registry.async_get(entity_id)
+    
+    # Get state - required for both paths
+    state = hass.states.get(entity_id)
+    
     if entry is None:
-        return "entity_not_found"
+        # Fallback: State-only validation for entities without registry entry
+        if state is None:
+            return "entity_not_found"
+        
+        # Extract domain from entity_id (e.g., "sensor.my_energy" -> "sensor")
+        domain = entity_id.split(".")[0] if "." in entity_id else None
+        if domain not in ALLOWED_DOMAINS:
+            return "entity_invalid_domain"
+        
+        # Log one-time warning about state-only entity
+        _LOGGER.warning(
+            "Entity %s is not in the entity registry (no unique_id). "
+            "Using relaxed validation based on state attributes only. "
+            "This is supported but registry-based entities are preferred.",
+            entity_id,
+        )
+        
+        # Validate device_class from state attributes (relaxed: allow if missing)
+        device_class = state.attributes.get("device_class")
+        if device_class and device_class.lower() not in ALLOWED_DEVICE_CLASSES:
+            return "entity_invalid_device_class"
+        
+        # Validate state_class from state attributes (relaxed: allow if missing)
+        state_class = state.attributes.get("state_class")
+        if state_class and state_class not in ALLOWED_STATE_CLASSES:
+            return "entity_invalid_state_class"
+        
+        # Validate unit (required for energy calculation)
+        unit = state.attributes.get("unit_of_measurement")
+        if unit and unit.lower() not in ALLOWED_UNITS:
+            return "entity_invalid_unit"
+        
+        # Validate state value
+        if state.state in {STATE_UNKNOWN, STATE_UNAVAILABLE}:
+            return None if allow_unknown_state else "entity_state_unavailable"
+        
+        try:
+            float(state.state)
+        except (TypeError, ValueError):
+            return "entity_state_non_numeric"
+        
+        return None
 
+    # Registry path: Full validation (existing behavior)
     if entry.domain not in ALLOWED_DOMAINS:
         return "entity_invalid_domain"
 
-    state = hass.states.get(entity_id)
     if state is None:
         return "entity_state_missing"
 

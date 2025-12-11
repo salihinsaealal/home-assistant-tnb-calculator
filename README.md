@@ -18,7 +18,7 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v4.3.4
+## ⭐ What's New in v4.3.5
 
 ### 🔁 Weekly Auto-Fetch & AFA API URL
 
@@ -36,6 +36,12 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
   - Entity: `text.tnb_calculator_afa_api_url`.
   - Lets you view/edit the AFA API URL directly in Home Assistant.
   - Attributes show `current_url`, `default_url`, and `effective_url`.
+
+### 🧾 State-Only Energy Entity Support
+
+- Import/export energy entities **no longer need an entity registry entry**.
+- If an energy sensor only exists in `hass.states` (no `unique_id`), the config flow uses a **relaxed validation path** based on state attributes (domain, unit, numeric value).
+- Existing users with registry-based entities are unaffected; this change only enables additional setups that previously failed validation.
 
 ## ⭐ What's New in v4.3.2
 
@@ -415,6 +421,7 @@ This integration is open source. Feel free to modify and share.
 
 ## Version History
 
+- v4.3.5: State-only energy entity support in config flow (fallback when entity registry entry is missing)
 - v4.3.4: Weekly AFA-only and full-tariff auto-fetch improvements, configurable AFA API URL entity
 - v4.3.2: Dynamic full-tariff loading from scraper `/complete`, auto-fetch switch, and MYR currency standardisation
 - v4.1.1: Dynamic AFA rate management, external scraper support, and automation blueprint for automatic AFA updates
