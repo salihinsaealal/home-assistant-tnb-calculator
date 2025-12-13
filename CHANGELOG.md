@@ -2,6 +2,21 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [4.4.1] - 2025-12-13
+
+### Added
+- **AFA Optimization & Sweet-Spot Sensors**
+  - `sensor.tnb_calculator_ideal_import_kwh` – ideal monthly import (gross kWh) that minimises total bill.
+  - `sensor.tnb_calculator_savings_if_ideal_kwh` – potential MYR savings if usage moves towards ideal import.
+  - `sensor.tnb_calculator_afa_optimization_savings` – compares current bill vs hypothetical 600 kWh bill.
+  - `binary_sensor.tnb_calculator_afa_weird_zone` – ON when more usage towards 600 kWh actually lowers the bill.
+  - `binary_sensor.tnb_calculator_afa_value_zone` – ON when extra kWh up to 600 are very cheap per kWh (good value).
+  - `sensor.tnb_calculator_afa_explanation` – short zone state with full explanation in attributes.
+
+### Improved
+- Updated the prebuilt dashboard with an **AFA Optimization** section.
+- README updated with automation examples and cleaner release notes formatting.
+
 ## [4.4.0b2] - 2025-12-11 (Beta)
 
 ### Improved

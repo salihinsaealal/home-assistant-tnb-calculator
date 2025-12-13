@@ -18,7 +18,7 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v4.4.0b2 (Beta)
+## ⭐ What's New in v4.4.1
 
 ### 🎯 AFA Optimization & Sweet-Spot Sensors
 
@@ -503,6 +503,7 @@ This integration is open source. Feel free to modify and share.
 
 ## Version History
 
+- v4.4.1: AFA optimization sensors + dashboard + automation examples
 - v4.4.0b2: AFA explanation state cleanup, dashboard section, and automation examples [beta]
 - v4.4.0b1: AFA optimization sensors (ideal import, savings, weird/value zones, human-readable explanation) [beta]
 - v4.3.5: State-only energy entity support in config flow (fallback when entity registry entry is missing)
