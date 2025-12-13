@@ -1,9 +1,14 @@
-views:
-  - title: TNB Calculator
-    path: tnb-calculator
-    icon: mdi:lightning-bolt-circle
-    badges: []
+title: TNB Calculator
+icon: mdi:lightning-bolt-circle
+badges: []
+cards: []
+type: sections
+sections:
+  - type: grid
     cards:
+      - type: heading
+        heading_style: title
+        heading: Main Cost
       - type: entities
         title: 💰 Monthly Costs
         show_header_toggle: false
@@ -25,10 +30,10 @@ views:
         title: 🎯 AFA Optimization
         show_header_toggle: false
         entities:
-          - entity: sensor.tnb_calculator_ideal_import_kwh
+          - entity: sensor.tnb_calculator_ideal_monthly_import
             name: Ideal Monthly Import
             icon: mdi:target
-          - entity: sensor.tnb_calculator_savings_if_ideal_kwh
+          - entity: sensor.tnb_calculator_savings_at_ideal_import
             name: Savings at Ideal
             icon: mdi:piggy-bank
           - entity: sensor.tnb_calculator_afa_optimization_savings
@@ -37,13 +42,19 @@ views:
           - entity: sensor.tnb_calculator_afa_explanation
             name: AFA Zone
             icon: mdi:information-outline
+            secondary_info: none
           - type: divider
-          - entity: binary_sensor.tnb_calculator_afa_weird_zone
+          - entity: sensor.tnb_calculator_afa_weird_zone
             name: Weird Zone Alert
             icon: mdi:alert-circle
-          - entity: binary_sensor.tnb_calculator_afa_value_zone
+          - entity: sensor.tnb_calculator_afa_value_zone
             name: Value Zone Alert
             icon: mdi:hand-coin
+  - type: grid
+    cards:
+      - type: heading
+        heading: Details
+        heading_style: title
       - type: entities
         title: ⚡ Energy Usage
         show_header_toggle: false
@@ -80,6 +91,27 @@ views:
           - entity: sensor.tnb_calculator_high_usage_alert
             name: High Usage Alert
             icon: mdi:alert-circle
+      - type: entities
+        title: 🛠️ Diagnostics
+        show_header_toggle: false
+        entities:
+          - entity: sensor.tnb_calculator_cached_holidays
+            name: Cached Holidays
+            icon: mdi:calendar-star
+          - entity: sensor.tnb_calculator_validation_status
+            name: Validation Status
+            icon: mdi:shield-check
+          - entity: sensor.tnb_calculator_storage_health
+            name: Storage Health
+            icon: mdi:database-check
+          - entity: sensor.tnb_calculator_integration_uptime
+            name: Integration Uptime
+            icon: mdi:clock-check
+  - type: grid
+    cards:
+      - type: heading
+        heading: Visualization
+        heading_style: title
       - type: custom:apexcharts-card
         header:
           show: true
@@ -105,22 +137,22 @@ views:
             show: true
             position: top
           grid:
-            borderColor: '#444'
+            borderColor: "#444"
         series:
           - entity: sensor.tnb_calculator_total_cost_tou
             name: ToU Cost
             type: area
-            color: '#FF9800'
+            color: "#FF9800"
             stroke_width: 3
           - entity: sensor.tnb_calculator_total_cost_non_tou
             name: Flat Cost
             type: area
-            color: '#4CAF50'
+            color: "#4CAF50"
             stroke_width: 3
           - entity: sensor.tnb_calculator_predicted_monthly_cost
             name: Forecast
             type: line
-            color: '#9C27B0'
+            color: "#9C27B0"
             stroke_width: 2
             curve: stepline
       - type: custom:apexcharts-card
@@ -152,7 +184,7 @@ views:
             show: true
             position: top
           grid:
-            borderColor: '#444'
+            borderColor: "#444"
         series:
           - entity: sensor.tnb_calculator_import_energy
             name: Import
@@ -161,7 +193,7 @@ views:
               func: diff
               duration: 1d
             yaxis_id: energy
-            color: '#F44336'
+            color: "#F44336"
           - entity: sensor.tnb_calculator_export_energy
             name: Export
             type: column
@@ -169,20 +201,10 @@ views:
               func: diff
               duration: 1d
             yaxis_id: energy
-            color: '#4CAF50'
-      - type: entities
-        title: 🛠️ Diagnostics
-        show_header_toggle: false
-        entities:
-          - entity: sensor.tnb_calculator_cached_holidays
-            name: Cached Holidays
-            icon: mdi:calendar-star
-          - entity: sensor.tnb_calculator_validation_status
-            name: Validation Status
-            icon: mdi:shield-check
-          - entity: sensor.tnb_calculator_storage_health
-            name: Storage Health
-            icon: mdi:database-check
-          - entity: sensor.tnb_calculator_integration_uptime
-            name: Integration Uptime
-            icon: mdi:clock-check
+            color: "#4CAF50"
+header:
+  card:
+    type: markdown
+    content: |-
+      # Hello {{ user }}
+      This is your Energy Monitoring Board ✨
