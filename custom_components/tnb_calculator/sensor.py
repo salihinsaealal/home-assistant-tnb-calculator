@@ -3,7 +3,7 @@ import asyncio
 import calendar
 import logging
 from datetime import datetime, time, timedelta
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Union
 
 import voluptuous as vol
 
@@ -101,7 +101,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="4.4.1",
+        sw_version="4.4.2",
     )
 
     sensors = [
@@ -2173,41 +2173,68 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         self,
         target_import_kwh: float,
         export_kwh: float,
-    ) -> float:
+        current_import_kwh: Optional[float] = None,
+        return_both: bool = False,
+    ) -> Union[float, Dict[str, float]]:
         """Simulate bill for a hypothetical import kWh.
         
         Uses the same calculation logic as the main update cycle,
         but with a specified import value instead of actual.
         
-        For ToU mode: assumes current peak/offpeak ratio.
+        For ToU mode: distributes delta (target - current) proportionally 
+        to current peak/offpeak ratio, then adds to current peak/offpeak.
         For non-ToU mode: uses target_import_kwh directly.
         
         Args:
             target_import_kwh: Hypothetical total import kWh
             export_kwh: Export kWh (fixed, from actual data)
+            current_import_kwh: Current import for delta-based distribution (optional)
+            return_both: If True, returns dict with both tou and non_tou costs
             
         Returns:
-            Total bill in MYR
+            Total bill in MYR (float) or dict with tou/non_tou costs if return_both=True
         """
-        if self._tou_enabled:
-            # Estimate peak/offpeak split based on current ratio
-            current_peak = self._monthly_data.get("import_peak", 0)
-            current_offpeak = self._monthly_data.get("import_offpeak", 0)
-            current_total = current_peak + current_offpeak
-            
-            if current_total > 0:
-                peak_ratio = current_peak / current_total
-            else:
-                peak_ratio = 0.6  # Default assumption: 60% peak
-            
+        # Get current peak/offpeak for proportional distribution
+        current_peak = self._monthly_data.get("import_peak", 0)
+        current_offpeak = self._monthly_data.get("import_offpeak", 0)
+        current_total = current_peak + current_offpeak
+        
+        # Calculate peak ratio for distribution
+        if current_total > 0:
+            peak_ratio = current_peak / current_total
+        else:
+            peak_ratio = 0.5  # Default assumption: 50% peak when no data
+        
+        # For ToU simulation: distribute delta proportionally
+        if current_import_kwh is not None and current_total > 0:
+            # Delta-based distribution: add delta proportionally to current values
+            delta = target_import_kwh - current_import_kwh
+            sim_peak = current_peak + (delta * peak_ratio)
+            sim_offpeak = current_offpeak + (delta * (1 - peak_ratio))
+        else:
+            # Absolute distribution when no current reference
             sim_peak = target_import_kwh * peak_ratio
             sim_offpeak = target_import_kwh * (1 - peak_ratio)
-            
-            result = self._calculate_tou_costs(sim_peak, sim_offpeak, export_kwh)
-        else:
-            result = self._calculate_non_tou_costs(target_import_kwh, export_kwh)
         
-        return result["total_cost"]
+        # Ensure non-negative values
+        sim_peak = max(0.0, sim_peak)
+        sim_offpeak = max(0.0, sim_offpeak)
+        
+        # Calculate costs
+        tou_result = self._calculate_tou_costs(sim_peak, sim_offpeak, export_kwh)
+        non_tou_result = self._calculate_non_tou_costs(target_import_kwh, export_kwh)
+        
+        if return_both:
+            return {
+                "tou": tou_result["total_cost"],
+                "non_tou": non_tou_result["total_cost"],
+            }
+        
+        # Return primary cost based on ToU mode
+        if self._tou_enabled:
+            return tou_result["total_cost"]
+        else:
+            return non_tou_result["total_cost"]
 
     def _generate_afa_explanation(
         self,
@@ -2270,72 +2297,232 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             f"If 600 kWh: RM {cost_600:.2f}."
         )
 
+    def _generate_afa_explanation_v2(
+        self,
+        zone: str,
+        label: str,
+        current_import: float,
+        best_target: int,
+        cost_now: float,
+        cost_target: float,
+        marginal_rate: float,
+        avg_rate_now: Optional[float],
+    ) -> str:
+        """Generate human-readable explanation using rate-based messaging.
+        
+        Focuses on marginal rate and average rate to explain recommendations.
+        
+        Args:
+            zone: "weird", "value", "normal", or "above_threshold"
+            label: "saves_money", "super_value", "value", "normal", "expensive"
+            current_import: Current month import kWh
+            best_target: Recommended target kWh
+            cost_now: Bill at current import
+            cost_target: Bill at best target
+            marginal_rate: Cost per extra kWh to target
+            avg_rate_now: Current average cost per kWh
+            
+        Returns:
+            Explanation string
+        """
+        delta_kwh = best_target - current_import
+        delta_cost = cost_target - cost_now
+        avg_rate_str = f"RM {avg_rate_now:.2f}/kWh" if avg_rate_now else "N/A"
+        
+        if label == "saves_money":
+            # Negative marginal rate - using more saves money
+            savings = -delta_cost
+            return (
+                f"Weird zone: Using more saves money! "
+                f"Current: {current_import:.0f} kWh (RM {cost_now:.2f}). "
+                f"Target: {best_target} kWh (RM {cost_target:.2f}). "
+                f"Add {delta_kwh:.0f} kWh to save RM {savings:.2f}."
+            )
+        
+        if label == "super_value":
+            return (
+                f"Super value! Extra kWh to {best_target} kWh costs only "
+                f"RM {marginal_rate:.2f}/kWh (vs {avg_rate_str} average). "
+                f"Current: {current_import:.0f} kWh (RM {cost_now:.2f}). "
+                f"Add {delta_kwh:.0f} kWh for RM {delta_cost:.2f} extra."
+            )
+        
+        if label == "value":
+            return (
+                f"Value opportunity: Extra kWh to {best_target} kWh costs "
+                f"RM {marginal_rate:.2f}/kWh (below {avg_rate_str} average). "
+                f"Current: {current_import:.0f} kWh (RM {cost_now:.2f}). "
+                f"Add {delta_kwh:.0f} kWh for RM {delta_cost:.2f} extra."
+            )
+        
+        if label == "expensive":
+            return (
+                f"Extra kWh to {best_target} kWh costs "
+                f"RM {marginal_rate:.2f}/kWh (above {avg_rate_str} average). "
+                f"Current: {current_import:.0f} kWh (RM {cost_now:.2f}). "
+                f"Consider staying at current usage."
+            )
+        
+        # Normal
+        return (
+            f"Current: {current_import:.0f} kWh (RM {cost_now:.2f}, {avg_rate_str}). "
+            f"Target: {best_target} kWh would cost RM {cost_target:.2f}. "
+            f"Marginal rate: RM {marginal_rate:.2f}/kWh."
+        )
+
     def _calculate_optimization_data(self) -> Dict[str, Any]:
         """Calculate all optimization sensor data in one pass.
         
-        Analyzes the current billing cycle to find:
-        - Ideal import kWh (minimum bill point)
-        - Savings if user moves to ideal
-        - AFA weird zone (more usage = lower bill)
-        - AFA value zone (cheap marginal rate to 600)
-        - Human-readable explanation
+        Uses MARGINAL RATE approach to find the best target import in 550-600 kWh range.
+        The recommended target is the one with the LOWEST marginal cost from current import.
+        
+        Key principles:
+        - Target is always >= current_import (practical, actionable)
+        - Search range: 550-600 kWh in 5 kWh steps
+        - Primary metric: marginal rate = (cost_target - cost_now) / (target - current)
+        - Labels based on marginal rate vs average rate
+        - Both ToU and non-ToU metrics computed when ToU enabled
         
         Returns:
-            Dict with keys for all optimization sensors
+            Dict with keys for all optimization sensors and rich attributes
         """
+        
         # Get current month data
         current_import = self._monthly_data.get("import_total", 0.0)
         export_total = self._monthly_data.get("export_total", 0.0)
         
-        # Cost at current import
-        cost_now = self._simulate_bill_for_import(current_import, export_total)
+        # Get costs at current import (both models when ToU enabled)
+        costs_now = self._simulate_bill_for_import(
+            current_import, export_total, current_import, return_both=True
+        )
+        cost_now_tou = costs_now["tou"]
+        cost_now_non_tou = costs_now["non_tou"]
         
-        # Cost at exactly 600 kWh (AFA threshold)
-        cost_at_600 = self._simulate_bill_for_import(600.0, export_total)
+        # Primary cost based on mode
+        cost_now_primary = cost_now_tou if self._tou_enabled else cost_now_non_tou
         
-        # Find ideal import (minimize bill) using search
-        # Search range: 0 to max(current × 1.5, 600, 800)
-        search_max = int(max(current_import * 1.5, 600, 800))
-        ideal_import = 0.0
-        ideal_cost = float('inf')
-        
-        # Use step of 1 kWh for accuracy (still fast: max ~800 iterations)
-        for candidate in range(0, search_max + 1):
-            candidate_cost = self._simulate_bill_for_import(float(candidate), export_total)
-            if candidate_cost < ideal_cost:
-                ideal_cost = candidate_cost
-                ideal_import = float(candidate)
-        
-        # Derived values
-        kwh_to_600 = 600.0 - current_import
-        delta_to_ideal = ideal_import - current_import
-        savings_if_ideal = cost_now - ideal_cost
-        afa_savings = cost_now - cost_at_600  # positive = weird zone
-        
-        # Marginal rate to 600 (cost per extra kWh)
-        if current_import < 600 and kwh_to_600 > 0:
-            avg_marginal_rate = (cost_at_600 - cost_now) / kwh_to_600
+        # Average rate now (cost / kWh)
+        if current_import > 0:
+            avg_rate_now_tou = cost_now_tou / current_import
+            avg_rate_now_non_tou = cost_now_non_tou / current_import
         else:
-            avg_marginal_rate = None
+            avg_rate_now_tou = None
+            avg_rate_now_non_tou = None
         
-        # Zone classification
-        EPSILON = 0.10  # MYR - avoid floating point noise
-        VALUE_THRESHOLD = 0.20  # MYR/kWh - "cheap" threshold
-        VALUE_KWH_RANGE = 100  # Only show value zone within 100 kWh of 600
+        # Cost at exactly 600 kWh (AFA threshold) for reference
+        costs_600 = self._simulate_bill_for_import(
+            600.0, export_total, current_import, return_both=True
+        )
+        cost_600_tou = costs_600["tou"]
+        cost_600_non_tou = costs_600["non_tou"]
+        cost_600_primary = cost_600_tou if self._tou_enabled else cost_600_non_tou
         
+        # =========================================================================
+        # MARGINAL RATE OPTIMIZATION: Find best target in 550-600 range
+        # =========================================================================
+        
+        # Edge case: already above 600 kWh
         if current_import >= 600:
-            zone = "above_threshold"
-            weird_zone = False
-            value_zone = False
-        elif afa_savings > EPSILON:
-            # More usage paradoxically lowers bill
+            return self._build_above_threshold_result(
+                current_import, export_total, 
+                cost_now_tou, cost_now_non_tou,
+                cost_600_tou, cost_600_non_tou,
+                avg_rate_now_tou, avg_rate_now_non_tou
+            )
+        
+        # Generate candidate targets: 550 to 600 in 5 kWh steps, filtered to >= current
+        candidates = [t for t in range(550, 605, 5) if t >= current_import]
+        
+        # If no candidates (current_import > 600 handled above, but edge case)
+        if not candidates:
+            candidates = [600]  # Fallback to 600
+        
+        # Evaluate each candidate
+        best_target_tou = None
+        best_marginal_tou = float('inf')
+        best_target_non_tou = None
+        best_marginal_non_tou = float('inf')
+        
+        evaluated_targets = []
+        
+        for target in candidates:
+            delta_kwh = target - current_import
+            
+            # Skip if delta is 0 (current == target)
+            if delta_kwh <= 0:
+                continue
+            
+            # Simulate cost at this target
+            costs_target = self._simulate_bill_for_import(
+                float(target), export_total, current_import, return_both=True
+            )
+            
+            # Marginal rate = (cost_target - cost_now) / delta_kwh
+            marginal_tou = (costs_target["tou"] - cost_now_tou) / delta_kwh
+            marginal_non_tou = (costs_target["non_tou"] - cost_now_non_tou) / delta_kwh
+            
+            evaluated_targets.append({
+                "target_kwh": target,
+                "delta_kwh": delta_kwh,
+                "cost_tou": self._round_currency(costs_target["tou"]),
+                "cost_non_tou": self._round_currency(costs_target["non_tou"]),
+                "marginal_tou": self._round_currency(marginal_tou),
+                "marginal_non_tou": self._round_currency(marginal_non_tou),
+            })
+            
+            # Track best (lowest marginal rate)
+            if marginal_tou < best_marginal_tou:
+                best_marginal_tou = marginal_tou
+                best_target_tou = target
+            if marginal_non_tou < best_marginal_non_tou:
+                best_marginal_non_tou = marginal_non_tou
+                best_target_non_tou = target
+        
+        # Handle case where no valid candidates (current_import is exactly a target)
+        if best_target_tou is None:
+            best_target_tou = int(current_import)
+            best_marginal_tou = 0.0
+        if best_target_non_tou is None:
+            best_target_non_tou = int(current_import)
+            best_marginal_non_tou = 0.0
+        
+        # Primary target based on mode
+        best_target = best_target_tou if self._tou_enabled else best_target_non_tou
+        best_marginal = best_marginal_tou if self._tou_enabled else best_marginal_non_tou
+        
+        # Get costs at best target
+        costs_best = self._simulate_bill_for_import(
+            float(best_target), export_total, current_import, return_both=True
+        )
+        
+        # Average rate at best target
+        if best_target > 0:
+            avg_rate_target_tou = costs_best["tou"] / best_target
+            avg_rate_target_non_tou = costs_best["non_tou"] / best_target
+        else:
+            avg_rate_target_tou = None
+            avg_rate_target_non_tou = None
+        
+        # =========================================================================
+        # LABEL CLASSIFICATION based on marginal rate
+        # =========================================================================
+        
+        label_tou = self._classify_marginal_label(
+            best_marginal_tou, avg_rate_now_tou
+        )
+        label_non_tou = self._classify_marginal_label(
+            best_marginal_non_tou, avg_rate_now_non_tou
+        )
+        
+        # Primary label
+        primary_label = label_tou if self._tou_enabled else label_non_tou
+        
+        # Zone classification (backward compatible)
+        if primary_label == "saves_money":
             zone = "weird"
             weird_zone = True
             value_zone = False
-        elif (avg_marginal_rate is not None 
-              and avg_marginal_rate < VALUE_THRESHOLD 
-              and kwh_to_600 <= VALUE_KWH_RANGE):
-            # Extra kWh to 600 is cheap per kWh
+        elif primary_label in ["super_value", "value"]:
             zone = "value"
             weird_zone = False
             value_zone = True
@@ -2344,32 +2531,245 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             weird_zone = False
             value_zone = False
         
-        # Generate explanation
-        explanation = self._generate_afa_explanation(
-            zone, current_import, cost_now, cost_at_600,
-            kwh_to_600, afa_savings, avg_marginal_rate
+        # Delta calculations
+        delta_to_target = best_target - current_import
+        delta_cost_to_target_tou = costs_best["tou"] - cost_now_tou
+        delta_cost_to_target_non_tou = costs_best["non_tou"] - cost_now_non_tou
+        delta_cost_primary = delta_cost_to_target_tou if self._tou_enabled else delta_cost_to_target_non_tou
+        
+        # Savings if at ideal (vs current cost)
+        # Note: "savings" means how much LESS you pay at target vs staying at current
+        # Negative delta_cost means target is cheaper (savings > 0)
+        savings_if_ideal = -delta_cost_primary if delta_cost_primary < 0 else 0.0
+        
+        # AFA optimization savings (vs 600 kWh reference)
+        afa_savings = cost_now_primary - cost_600_primary
+        
+        # Marginal rate to 600 (for backward compatibility)
+        kwh_to_600 = 600.0 - current_import
+        if kwh_to_600 > 0:
+            marginal_to_600_tou = (cost_600_tou - cost_now_tou) / kwh_to_600
+            marginal_to_600_non_tou = (cost_600_non_tou - cost_now_non_tou) / kwh_to_600
+        else:
+            marginal_to_600_tou = None
+            marginal_to_600_non_tou = None
+        
+        avg_marginal_rate = marginal_to_600_tou if self._tou_enabled else marginal_to_600_non_tou
+        
+        # Generate explanation with new rate-based messaging
+        explanation = self._generate_afa_explanation_v2(
+            zone=zone,
+            label=primary_label,
+            current_import=current_import,
+            best_target=best_target,
+            cost_now=cost_now_primary,
+            cost_target=costs_best["tou"] if self._tou_enabled else costs_best["non_tou"],
+            marginal_rate=best_marginal,
+            avg_rate_now=avg_rate_now_tou if self._tou_enabled else avg_rate_now_non_tou,
+        )
+        
+        # Debug logging for validation
+        _LOGGER.debug(
+            "AFA Optimization: import=%.1f kWh, target=%d kWh, "
+            "marginal=%.3f MYR/kWh, avg_rate=%.3f MYR/kWh, label=%s, zone=%s",
+            current_import, best_target, best_marginal,
+            (avg_rate_now_tou if self._tou_enabled else avg_rate_now_non_tou) or 0,
+            primary_label, zone
         )
         
         return {
-            # Main sensor values
-            "ideal_import_kwh": self._round_energy(ideal_import),
-            "savings_if_ideal_kwh": self._round_currency(max(savings_if_ideal, 0)),  # Clamp to 0
+            # Main sensor values (backward compatible)
+            "ideal_import_kwh": self._round_energy(float(best_target)),
+            "savings_if_ideal_kwh": self._round_currency(max(savings_if_ideal, 0)),
             "afa_optimization_savings": self._round_currency(afa_savings),
             "afa_weird_zone": weird_zone,
             "afa_value_zone": value_zone,
             "afa_explanation": explanation,
-            # Attributes
+            
+            # Zone and labels
             "optimization_zone": zone,
+            "primary_label": primary_label,
+            "primary_model": "tou" if self._tou_enabled else "non_tou",
+            
+            # Current state
             "current_import_kwh": self._round_energy(current_import),
             "export_total_kwh": self._round_energy(export_total),
-            "cost_now_myr": self._round_currency(cost_now),
-            "cost_at_600_myr": self._round_currency(cost_at_600),
-            "ideal_cost_myr": self._round_currency(ideal_cost),
+            
+            # ToU metrics
+            "tou": {
+                "cost_now_myr": self._round_currency(cost_now_tou),
+                "cost_target_myr": self._round_currency(costs_best["tou"]),
+                "cost_600_myr": self._round_currency(cost_600_tou),
+                "best_target_kwh": best_target_tou,
+                "delta_kwh_to_target": best_target_tou - current_import,
+                "delta_cost_to_target_myr": self._round_currency(delta_cost_to_target_tou),
+                "marginal_rate_to_target": self._round_currency(best_marginal_tou),
+                "marginal_rate_to_600": self._round_currency(marginal_to_600_tou) if marginal_to_600_tou else None,
+                "avg_rate_now": self._round_currency(avg_rate_now_tou) if avg_rate_now_tou else None,
+                "avg_rate_target": self._round_currency(avg_rate_target_tou) if avg_rate_target_tou else None,
+                "label": label_tou,
+            },
+            
+            # Non-ToU metrics
+            "non_tou": {
+                "cost_now_myr": self._round_currency(cost_now_non_tou),
+                "cost_target_myr": self._round_currency(costs_best["non_tou"]),
+                "cost_600_myr": self._round_currency(cost_600_non_tou),
+                "best_target_kwh": best_target_non_tou,
+                "delta_kwh_to_target": best_target_non_tou - current_import,
+                "delta_cost_to_target_myr": self._round_currency(delta_cost_to_target_non_tou),
+                "marginal_rate_to_target": self._round_currency(best_marginal_non_tou),
+                "marginal_rate_to_600": self._round_currency(marginal_to_600_non_tou) if marginal_to_600_non_tou else None,
+                "avg_rate_now": self._round_currency(avg_rate_now_non_tou) if avg_rate_now_non_tou else None,
+                "avg_rate_target": self._round_currency(avg_rate_target_non_tou) if avg_rate_target_non_tou else None,
+                "label": label_non_tou,
+            },
+            
+            # Backward compatibility attributes
+            "cost_now_myr": self._round_currency(cost_now_primary),
+            "cost_at_600_myr": self._round_currency(cost_600_primary),
+            "ideal_cost_myr": self._round_currency(costs_best["tou"] if self._tou_enabled else costs_best["non_tou"]),
             "kwh_to_600": self._round_energy(kwh_to_600),
-            "delta_to_ideal_kwh": self._round_energy(delta_to_ideal),
+            "delta_to_ideal_kwh": self._round_energy(delta_to_target),
             "avg_marginal_rate": self._round_currency(avg_marginal_rate) if avg_marginal_rate else None,
-            "search_range_max": search_max,
             "afa_rate": self._get_tariff_rate("afa_rate", DEFAULT_AFA_RATE),
+            
+            # Debug info
+            "evaluated_targets": evaluated_targets,
+        }
+    
+    def _classify_marginal_label(
+        self, 
+        marginal_rate: float, 
+        avg_rate_now: Optional[float]
+    ) -> str:
+        """Classify marginal rate into a human-readable label.
+        
+        Labels based on marginal rate relative to average rate:
+        - saves_money: marginal < 0 (using more reduces bill)
+        - super_value: marginal <= 0.25 * avg_rate
+        - value: marginal <= 0.60 * avg_rate
+        - normal: marginal <= 1.00 * avg_rate
+        - expensive: marginal > avg_rate
+        
+        When avg_rate <= 0 (negative bills, early month), use absolute thresholds.
+        
+        Args:
+            marginal_rate: Cost per extra kWh to target
+            avg_rate_now: Current average cost per kWh
+            
+        Returns:
+            Label string
+        """
+        # Saves money: marginal rate is negative
+        if marginal_rate < 0:
+            return "saves_money"
+        
+        # Handle edge cases where avg_rate is None, zero, or negative
+        if avg_rate_now is None or avg_rate_now <= 0:
+            # Use absolute thresholds
+            if marginal_rate <= 0.05:  # Very cheap
+                return "value"
+            else:
+                return "normal"
+        
+        # Relative thresholds based on average rate
+        if marginal_rate <= 0.25 * avg_rate_now:
+            return "super_value"
+        elif marginal_rate <= 0.60 * avg_rate_now:
+            return "value"
+        elif marginal_rate <= 1.00 * avg_rate_now:
+            return "normal"
+        else:
+            return "expensive"
+    
+    def _build_above_threshold_result(
+        self,
+        current_import: float,
+        export_total: float,
+        cost_now_tou: float,
+        cost_now_non_tou: float,
+        cost_600_tou: float,
+        cost_600_non_tou: float,
+        avg_rate_now_tou: Optional[float],
+        avg_rate_now_non_tou: Optional[float],
+    ) -> Dict[str, Any]:
+        """Build result dict for above_threshold case (current >= 600 kWh).
+        
+        When already above 600 kWh, there's no target to recommend.
+        Just report current state.
+        """
+        cost_now_primary = cost_now_tou if self._tou_enabled else cost_now_non_tou
+        avg_rate_primary = avg_rate_now_tou if self._tou_enabled else avg_rate_now_non_tou
+        
+        afa_rate = self._get_tariff_rate("afa_rate", DEFAULT_AFA_RATE)
+        afa_amount = current_import * afa_rate
+        
+        explanation = (
+            f"Already above 600 kWh ({current_import:.0f} kWh). "
+            f"AFA rebate of RM {afa_amount:.2f} is active. "
+            f"Average rate: RM {avg_rate_primary:.2f}/kWh."
+        )
+        
+        return {
+            # Main sensor values
+            "ideal_import_kwh": self._round_energy(current_import),
+            "savings_if_ideal_kwh": 0.0,
+            "afa_optimization_savings": 0.0,
+            "afa_weird_zone": False,
+            "afa_value_zone": False,
+            "afa_explanation": explanation,
+            
+            # Zone and labels
+            "optimization_zone": "above_threshold",
+            "primary_label": "above_threshold",
+            "primary_model": "tou" if self._tou_enabled else "non_tou",
+            
+            # Current state
+            "current_import_kwh": self._round_energy(current_import),
+            "export_total_kwh": self._round_energy(export_total),
+            
+            # ToU metrics
+            "tou": {
+                "cost_now_myr": self._round_currency(cost_now_tou),
+                "cost_target_myr": self._round_currency(cost_now_tou),
+                "cost_600_myr": self._round_currency(cost_600_tou),
+                "best_target_kwh": int(current_import),
+                "delta_kwh_to_target": 0,
+                "delta_cost_to_target_myr": 0.0,
+                "marginal_rate_to_target": None,
+                "marginal_rate_to_600": None,
+                "avg_rate_now": self._round_currency(avg_rate_now_tou) if avg_rate_now_tou else None,
+                "avg_rate_target": self._round_currency(avg_rate_now_tou) if avg_rate_now_tou else None,
+                "label": "above_threshold",
+            },
+            
+            # Non-ToU metrics
+            "non_tou": {
+                "cost_now_myr": self._round_currency(cost_now_non_tou),
+                "cost_target_myr": self._round_currency(cost_now_non_tou),
+                "cost_600_myr": self._round_currency(cost_600_non_tou),
+                "best_target_kwh": int(current_import),
+                "delta_kwh_to_target": 0,
+                "delta_cost_to_target_myr": 0.0,
+                "marginal_rate_to_target": None,
+                "marginal_rate_to_600": None,
+                "avg_rate_now": self._round_currency(avg_rate_now_non_tou) if avg_rate_now_non_tou else None,
+                "avg_rate_target": self._round_currency(avg_rate_now_non_tou) if avg_rate_now_non_tou else None,
+                "label": "above_threshold",
+            },
+            
+            # Backward compatibility attributes
+            "cost_now_myr": self._round_currency(cost_now_primary),
+            "cost_at_600_myr": self._round_currency(cost_600_tou if self._tou_enabled else cost_600_non_tou),
+            "ideal_cost_myr": self._round_currency(cost_now_primary),
+            "kwh_to_600": 0.0,
+            "delta_to_ideal_kwh": 0.0,
+            "avg_marginal_rate": None,
+            "afa_rate": afa_rate,
+            
+            # Debug info
+            "evaluated_targets": [],
         }
 
 
@@ -2402,7 +2802,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "4.4.1",
+            "sw_version": "4.4.2",
         }
 
     @property
@@ -2478,21 +2878,36 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
         # Add optimization sensor attributes
         optimization_data = self.coordinator.data.get("_optimization_data", {})
         
+        # Get ToU and non-ToU metrics from optimization data
+        tou_metrics = optimization_data.get("tou", {})
+        non_tou_metrics = optimization_data.get("non_tou", {})
+        primary_model = optimization_data.get("primary_model", "non_tou")
+        
         if self._sensor_type == "ideal_import_kwh":
             attrs.update({
                 "current_month_import_kwh": optimization_data.get("current_import_kwh"),
-                "delta_to_ideal_kwh": optimization_data.get("delta_to_ideal_kwh"),
+                "delta_to_target_kwh": optimization_data.get("delta_to_ideal_kwh"),
                 "estimated_bill_at_current_myr": optimization_data.get("cost_now_myr"),
-                "estimated_bill_at_ideal_myr": optimization_data.get("ideal_cost_myr"),
-                "search_range_max": optimization_data.get("search_range_max"),
+                "estimated_bill_at_target_myr": optimization_data.get("ideal_cost_myr"),
+                "primary_model": primary_model,
+                "primary_label": optimization_data.get("primary_label"),
+                # Rate metrics
+                "avg_rate_now_myr_per_kwh": tou_metrics.get("avg_rate_now") if primary_model == "tou" else non_tou_metrics.get("avg_rate_now"),
+                "avg_rate_target_myr_per_kwh": tou_metrics.get("avg_rate_target") if primary_model == "tou" else non_tou_metrics.get("avg_rate_target"),
+                "marginal_rate_to_target_myr_per_kwh": tou_metrics.get("marginal_rate_to_target") if primary_model == "tou" else non_tou_metrics.get("marginal_rate_to_target"),
+                # Both models for comparison
+                "tou": tou_metrics,
+                "non_tou": non_tou_metrics,
             })
         
         if self._sensor_type == "savings_if_ideal_kwh":
             attrs.update({
                 "current_bill_myr": optimization_data.get("cost_now_myr"),
-                "ideal_bill_myr": optimization_data.get("ideal_cost_myr"),
-                "ideal_import_kwh": optimization_data.get("ideal_import_kwh"),
+                "target_bill_myr": optimization_data.get("ideal_cost_myr"),
+                "target_import_kwh": optimization_data.get("ideal_import_kwh"),
                 "delta_kwh": optimization_data.get("delta_to_ideal_kwh"),
+                "primary_model": primary_model,
+                "primary_label": optimization_data.get("primary_label"),
             })
         
         if self._sensor_type == "afa_optimization_savings":
@@ -2501,7 +2916,10 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
                 "kwh_to_600": optimization_data.get("kwh_to_600"),
                 "cost_if_stop_now_myr": optimization_data.get("cost_now_myr"),
                 "cost_if_600kwh_myr": optimization_data.get("cost_at_600_myr"),
-                "avg_marginal_rate_myr_per_kwh": optimization_data.get("avg_marginal_rate"),
+                "marginal_rate_to_600_myr_per_kwh": optimization_data.get("avg_marginal_rate"),
+                "primary_model": primary_model,
+                # Rate comparison
+                "avg_rate_now_myr_per_kwh": tou_metrics.get("avg_rate_now") if primary_model == "tou" else non_tou_metrics.get("avg_rate_now"),
             })
         
         if self._sensor_type == "afa_weird_zone":
@@ -2509,28 +2927,41 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
                 "savings_myr": optimization_data.get("afa_optimization_savings"),
                 "kwh_to_600": optimization_data.get("kwh_to_600"),
                 "current_import_kwh": optimization_data.get("current_import_kwh"),
+                "primary_label": optimization_data.get("primary_label"),
+                "marginal_rate_to_target": tou_metrics.get("marginal_rate_to_target") if primary_model == "tou" else non_tou_metrics.get("marginal_rate_to_target"),
             })
         
         if self._sensor_type == "afa_value_zone":
-            avg_marginal = optimization_data.get("avg_marginal_rate")
-            cost_now = optimization_data.get("cost_now_myr") or 0
-            cost_600 = optimization_data.get("cost_at_600_myr") or 0
+            primary_metrics = tou_metrics if primary_model == "tou" else non_tou_metrics
             attrs.update({
-                "avg_marginal_rate_myr_per_kwh": avg_marginal,
-                "extra_cost_to_600_myr": cost_600 - cost_now if cost_600 > cost_now else 0,
-                "kwh_to_600": optimization_data.get("kwh_to_600"),
-                "value_threshold_myr_per_kwh": 0.20,
+                "marginal_rate_to_target_myr_per_kwh": primary_metrics.get("marginal_rate_to_target"),
+                "avg_rate_now_myr_per_kwh": primary_metrics.get("avg_rate_now"),
+                "delta_cost_to_target_myr": primary_metrics.get("delta_cost_to_target_myr"),
+                "delta_kwh_to_target": primary_metrics.get("delta_kwh_to_target"),
+                "primary_label": optimization_data.get("primary_label"),
             })
         
         if self._sensor_type == "afa_explanation":
+            primary_metrics = tou_metrics if primary_model == "tou" else non_tou_metrics
             attrs.update({
                 "zone": optimization_data.get("optimization_zone"),
                 "explanation": optimization_data.get("afa_explanation"),
                 "current_import_kwh": optimization_data.get("current_import_kwh"),
                 "cost_now_myr": optimization_data.get("cost_now_myr"),
                 "cost_600_myr": optimization_data.get("cost_at_600_myr"),
-                "savings_myr": optimization_data.get("afa_optimization_savings"),
                 "afa_rate": optimization_data.get("afa_rate"),
+                # New rate-based attributes
+                "primary_model": primary_model,
+                "primary_label": optimization_data.get("primary_label"),
+                "recommended_target_kwh": optimization_data.get("ideal_import_kwh"),
+                "avg_rate_now_myr_per_kwh": primary_metrics.get("avg_rate_now"),
+                "avg_rate_target_myr_per_kwh": primary_metrics.get("avg_rate_target"),
+                "marginal_rate_to_target_myr_per_kwh": primary_metrics.get("marginal_rate_to_target"),
+                "delta_kwh_to_target": primary_metrics.get("delta_kwh_to_target"),
+                "delta_cost_to_target_myr": primary_metrics.get("delta_cost_to_target_myr"),
+                # Both models for advanced users
+                "tou": tou_metrics,
+                "non_tou": non_tou_metrics,
             })
 
         return attrs

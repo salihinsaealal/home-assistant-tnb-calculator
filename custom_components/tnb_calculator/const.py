@@ -21,7 +21,7 @@ CONF_CALENDARIFIC_API_KEY = "calendarific_api_key"
 CONF_COUNTRY = "country"
 CONF_YEAR = "year"
 CONF_BILLING_START_DAY = "billing_start_day"
-CONF_VERSION = "4.4.1"
+CONF_VERSION = "4.4.2"
 
 # Tariff defaults (can be overridden via service)
 DEFAULT_AFA_RATE = 0.0145          # MYR/kWh for usage >= 600 kWh

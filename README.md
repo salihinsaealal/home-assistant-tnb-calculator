@@ -18,32 +18,36 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v4.4.1
+## ⭐ What's New in v4.4.2
 
-### 🎯 AFA Optimization & Sweet-Spot Sensors
+### 🎯 Smarter AFA Optimization with Marginal Rate Analysis
 
-- **Ideal Import & Savings**
+The AFA optimization sensors now use a **practical, rate-based approach** to help you make informed decisions:
+
+- **Recommended Target Import** (not theoretical minimum)
   - `sensor.tnb_calculator_ideal_import_kwh`
-    - Shows the **optimal monthly import kWh** (gross import) that gives the **lowest bill**, based on your current tariffs and AFA.
-  - `sensor.tnb_calculator_savings_if_ideal_kwh`
-    - Shows how much **MYR you could save** if you move your usage towards the ideal import.
-- **AFA 600 kWh Threshold Analysis**
-  - `sensor.tnb_calculator_afa_optimization_savings`
-    - Compares **your current bill** vs a hypothetical **600 kWh import** bill.
-    - Positive = going to **600 kWh is cheaper** than stopping now (AFA weird zone).
-  - `binary_sensor.tnb_calculator_afa_weird_zone`
-    - **ON** when **more usage towards 600 kWh actually lowers your bill** because AFA rebate dominates.
-  - `binary_sensor.tnb_calculator_afa_value_zone`
-    - **ON** when stopping now is cheaper overall, but extra kWh up to 600 are **very cheap per kWh** (good value instead of pure jimat).
-  - `sensor.tnb_calculator_afa_explanation`
-    - Human-readable explanation of your current AFA situation:
-      - Normal, Weird zone, Value zone, or Already above 600 kWh.
-    - Includes current import, cost now, cost at 600 kWh and AFA rate.
+    - Now shows a **practical target** in the 550–600 kWh range based on **lowest marginal cost**.
+    - Target is always **>= your current import** (no impractical "use 0 kWh" suggestions).
+    - Attributes include: `avg_rate_now`, `avg_rate_target`, `marginal_rate_to_target`, and both ToU/non-ToU metrics.
 
-These sensors are calculated purely from your existing monthly import/export totals and tariff data. They **do not change** your usage; they only help you decide whether to:
-- Keep usage low (pure saving)
-- Increase usage slightly for better value
-- Or intentionally move towards the AFA sweet spot around **600 kWh**.
+- **Rate-Based Labels** (intuitive decision making)
+  - `saves_money` — Using more actually reduces your bill (weird zone)
+  - `super_value` — Extra kWh costs ≤25% of your average rate
+  - `value` — Extra kWh costs ≤60% of your average rate
+  - `normal` — Extra kWh costs around your average rate
+  - `expensive` — Extra kWh costs more than your average rate
+
+- **Rich Attributes on All Optimization Sensors**
+  - Both **ToU** and **non-ToU** metrics exposed for comparison.
+  - `afa_explanation` now shows rate-based messaging with clear RM/kWh figures.
+
+- **Backward Compatible**
+  - Existing sensors (`afa_weird_zone`, `afa_value_zone`, `afa_optimization_savings`) still work.
+  - Automations using these sensors will continue to function.
+
+### How It Works
+
+The integration evaluates targets from 550–600 kWh (5 kWh steps) and picks the one with the **lowest marginal rate** — meaning the cheapest cost per additional kWh from your current usage. This gives you actionable advice instead of theoretical minimums.
 
 <details>
   <summary><strong>Older release notes</strong></summary>
@@ -503,6 +507,7 @@ This integration is open source. Feel free to modify and share.
 
 ## Version History
 
+- v4.4.2: Smarter AFA optimization with marginal rate analysis (practical targets, rate-based labels)
 - v4.4.1: AFA optimization sensors + dashboard + automation examples
 - v4.4.0b2: AFA explanation state cleanup, dashboard section, and automation examples [beta]
 - v4.4.0b1: AFA optimization sensors (ideal import, savings, weird/value zones, human-readable explanation) [beta]

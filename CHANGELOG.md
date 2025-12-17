@@ -2,6 +2,36 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [4.4.2] - 2025-12-17
+
+### Changed
+- **AFA Optimization: Marginal Rate Approach**
+  - `ideal_import_kwh` now recommends a **practical target** (550–600 kWh range) based on lowest marginal cost.
+  - Target is always **>= current import** — no more impractical "0 kWh ideal" suggestions.
+  - Search uses 5 kWh steps for efficiency (11 candidates max).
+
+### Added
+- **Rate-Based Labels** for intuitive decision making:
+  - `saves_money` — Using more reduces your bill (AFA weird zone).
+  - `super_value` — Extra kWh costs ≤25% of your average rate.
+  - `value` — Extra kWh costs ≤60% of your average rate.
+  - `normal` — Extra kWh costs around your average rate.
+  - `expensive` — Extra kWh costs more than your average rate.
+
+- **Rich Attributes on Optimization Sensors**
+  - Both **ToU** and **non-ToU** metrics exposed via attributes.
+  - New attributes: `avg_rate_now`, `avg_rate_target`, `marginal_rate_to_target`, `primary_label`, `primary_model`.
+  - `afa_explanation` shows rate-based messaging with clear RM/kWh figures.
+
+### Improved
+- **Proportional ToU Distribution**: When simulating future kWh, delta is distributed proportionally to current peak/offpeak ratio.
+- **Edge Case Handling**: Robust handling for import >= 600, import <= 0, and negative average rates (solar users).
+- **Debug Logging**: Added debug-level logging for AFA optimization validation.
+
+### Backward Compatible
+- Existing sensors and automations continue to work unchanged.
+- Binary sensors (`afa_weird_zone`, `afa_value_zone`) still function based on the new labels.
+
 ## [4.4.1] - 2025-12-13
 
 ### Added
