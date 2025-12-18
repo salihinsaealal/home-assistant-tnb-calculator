@@ -18,7 +18,41 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v4.4.2
+## ⭐ What's New in v4.4.3
+
+### 🎯 Separate ToU & Non-ToU Recommendations + Smart Stay Put
+
+Major improvements to the AFA optimization sensors:
+
+- **Separate Entities for ToU and Non-ToU**
+  - `sensor.tnb_calculator_ideal_import_kwh_tou` — ToU-specific recommendation
+  - `sensor.tnb_calculator_ideal_import_kwh_non_tou` — Non-ToU recommendation
+  - Each model computes its own target independently — no more forced agreement.
+
+- **Option B Gating: Only Recommend When It's Value**
+  - Only recommends increasing usage if label is `saves_money`, `super_value`, or `value`.
+  - If extra kWh isn't worth it (`normal`/`expensive`), the sensor stays at your current usage.
+
+- **New `stay_put` Zone**
+  - When you're near the 550–600 kWh band but extra kWh isn't good value, zone becomes `stay_put`.
+  - Clear messaging: "No value in adding kWh."
+
+- **Normalized Attribute Keys**
+  - Unit-suffixed keys: `*_myr`, `*_kwh`, `*_myr_per_kwh`
+  - Rates now use 3 decimal places for precision.
+  - Backward-compatible aliases retained.
+
+### Rate-Based Labels
+
+- `saves_money` — Using more actually reduces your bill (weird zone)
+- `super_value` — Extra kWh costs ≤25% of your average rate
+- `value` — Extra kWh costs ≤60% of your average rate
+- `stay_put` — Near threshold but not worth adding kWh
+- `normal` — Extra kWh costs around your average rate
+- `expensive` — Extra kWh costs more than your average rate
+
+<details>
+  <summary><strong>v4.4.2 release notes</strong></summary>
 
 ### 🎯 Smarter AFA Optimization with Marginal Rate Analysis
 
@@ -30,24 +64,11 @@ The AFA optimization sensors now use a **practical, rate-based approach** to hel
     - Target is always **>= your current import** (no impractical "use 0 kWh" suggestions).
     - Attributes include: `avg_rate_now`, `avg_rate_target`, `marginal_rate_to_target`, and both ToU/non-ToU metrics.
 
-- **Rate-Based Labels** (intuitive decision making)
-  - `saves_money` — Using more actually reduces your bill (weird zone)
-  - `super_value` — Extra kWh costs ≤25% of your average rate
-  - `value` — Extra kWh costs ≤60% of your average rate
-  - `normal` — Extra kWh costs around your average rate
-  - `expensive` — Extra kWh costs more than your average rate
-
 - **Rich Attributes on All Optimization Sensors**
   - Both **ToU** and **non-ToU** metrics exposed for comparison.
   - `afa_explanation` now shows rate-based messaging with clear RM/kWh figures.
 
-- **Backward Compatible**
-  - Existing sensors (`afa_weird_zone`, `afa_value_zone`, `afa_optimization_savings`) still work.
-  - Automations using these sensors will continue to function.
-
-### How It Works
-
-The integration evaluates targets from 550–600 kWh (5 kWh steps) and picks the one with the **lowest marginal rate** — meaning the cheapest cost per additional kWh from your current usage. This gives you actionable advice instead of theoretical minimums.
+</details>
 
 <details>
   <summary><strong>Older release notes</strong></summary>
@@ -507,6 +528,7 @@ This integration is open source. Feel free to modify and share.
 
 ## Version History
 
+- v4.4.3: Separate ToU/non-ToU recommendation entities, Option B gating, stay_put zone, normalized attribute keys
 - v4.4.2: Smarter AFA optimization with marginal rate analysis (practical targets, rate-based labels)
 - v4.4.1: AFA optimization sensors + dashboard + automation examples
 - v4.4.0b2: AFA explanation state cleanup, dashboard section, and automation examples [beta]

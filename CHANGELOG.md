@@ -2,6 +2,36 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [4.4.3] - 2025-12-18
+
+### Added
+- **Separate ToU and Non-ToU Recommendation Entities**
+  - `sensor.tnb_calculator_ideal_import_kwh_tou` — ToU-specific recommendation
+  - `sensor.tnb_calculator_ideal_import_kwh_non_tou` — Non-ToU recommendation
+  - Each model computes its own target independently (no forced agreement).
+
+- **Option B Gating: Only Recommend When It's Value**
+  - Only recommends increasing usage if label is `saves_money`, `super_value`, or `value`.
+  - If extra kWh isn't worth it (`normal`/`expensive`), sensor stays at current usage.
+
+- **New `stay_put` Zone and Label (Z2-B)**
+  - When you're near 550–600 kWh band but extra kWh isn't good value, zone becomes `stay_put`.
+  - Clear messaging: "No value in adding kWh."
+
+- **Normalized Attribute Keys**
+  - Unit-suffixed keys: `*_myr`, `*_kwh`, `*_myr_per_kwh`
+  - New `_round_rate()` helper: rates now use 3 decimal places.
+  - Backward-compatible aliases retained for existing templates/automations.
+
+### Changed
+- **Per-Model Zones**: Each model (ToU/non-ToU) now has its own `zone` attribute.
+- **Rate-Based Labels** now include `stay_put` for near-threshold cases.
+- **Explanation Messaging** updated for `stay_put` and clearer guidance.
+
+### Backward Compatible
+- Existing sensors and automations continue to work unchanged.
+- Primary sensor (`ideal_import_kwh`) still follows ToU-first when enabled.
+
 ## [4.4.2] - 2025-12-17
 
 ### Changed

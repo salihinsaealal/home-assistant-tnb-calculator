@@ -21,7 +21,7 @@ CONF_CALENDARIFIC_API_KEY = "calendarific_api_key"
 CONF_COUNTRY = "country"
 CONF_YEAR = "year"
 CONF_BILLING_START_DAY = "billing_start_day"
-CONF_VERSION = "4.4.2"
+CONF_VERSION = "4.4.3"
 
 # Tariff defaults (can be overridden via service)
 DEFAULT_AFA_RATE = 0.0145          # MYR/kWh for usage >= 600 kWh
@@ -240,6 +240,22 @@ BASE_SENSOR_TYPES = {
     # Optimization sensors - AFA sweet spot analysis
     "ideal_import_kwh": {
         "name": "Ideal Monthly Import",
+        "unit": "kWh",
+        "device_class": "energy",
+        "state_class": "measurement",
+        "entity_category": None,  # Main entity
+        "icon": "mdi:target",
+    },
+    "ideal_import_kwh_tou": {
+        "name": "Ideal Import (ToU)",
+        "unit": "kWh",
+        "device_class": "energy",
+        "state_class": "measurement",
+        "entity_category": None,  # Main entity
+        "icon": "mdi:target",
+    },
+    "ideal_import_kwh_non_tou": {
+        "name": "Ideal Import (Non-ToU)",
         "unit": "kWh",
         "device_class": "energy",
         "state_class": "measurement",
