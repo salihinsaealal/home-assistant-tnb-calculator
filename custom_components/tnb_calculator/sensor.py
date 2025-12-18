@@ -101,7 +101,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="4.4.3",
+        sw_version="4.4.4",
     )
 
     sensors = [
@@ -475,10 +475,6 @@ class TNBDataCoordinator(DataUpdateCoordinator):
 
             import_delta = self._compute_delta(import_total, "import_last")
             export_delta = self._compute_delta(export_total, "export_last")
-            
-            # Compute daily deltas (from midnight start)
-            daily_import_delta = import_total - self._daily_data.get("import_start", import_total)
-            daily_export_delta = export_total - self._daily_data.get("export_start", export_total)
 
             is_holiday = False
             if self._tou_enabled:
@@ -486,19 +482,48 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 await self._fetch_holidays_if_needed(now)
                 is_holiday = await self._is_holiday(now)
 
+            # Get last update timestamp for boundary-aware daily split
+            last_update_ts_str = self._daily_data.get("last_update_ts")
+            if last_update_ts_str:
+                try:
+                    last_update_ts = dt_util.parse_datetime(last_update_ts_str)
+                except (ValueError, TypeError):
+                    last_update_ts = now
+            else:
+                last_update_ts = now
+
             data_changed = False
             if import_delta > 0:
+                # Update monthly totals (unchanged logic)
                 self._monthly_data["import_total"] += import_delta
                 if self._tou_enabled:
                     if self._is_peak_period(now, is_holiday):
                         self._monthly_data["import_peak"] += import_delta
                     else:
                         self._monthly_data["import_offpeak"] += import_delta
+                
+                # Update daily totals using delta-based accumulation
+                self._daily_data["import_total"] = self._daily_data.get("import_total", 0.0) + import_delta
+                
+                # Split delta into peak/off-peak using boundary-aware logic
+                if self._tou_enabled:
+                    peak_delta, offpeak_delta = self._split_delta_by_period(
+                        import_delta, last_update_ts, now, is_holiday
+                    )
+                    self._daily_data["import_peak"] = self._daily_data.get("import_peak", 0.0) + peak_delta
+                    self._daily_data["import_offpeak"] = self._daily_data.get("import_offpeak", 0.0) + offpeak_delta
+                
                 data_changed = True
 
             if export_delta > 0:
+                # Update monthly export (unchanged)
                 self._monthly_data["export_total"] += export_delta
+                # Update daily export using delta-based accumulation
+                self._daily_data["export_total"] = self._daily_data.get("export_total", 0.0) + export_delta
                 data_changed = True
+
+            # Update last_update_ts for next interval's boundary calculation
+            self._daily_data["last_update_ts"] = now.isoformat()
 
             # Save data after changes
             if data_changed:
@@ -506,36 +531,11 @@ class TNBDataCoordinator(DataUpdateCoordinator):
 
             self._state["timestamp"] = now
 
-            # Get monthly totals (must be BEFORE daily calculations that use them)
+            # Get monthly totals
             monthly_import = self._monthly_data["import_total"]
             monthly_export = self._monthly_data["export_total"]
             monthly_peak = self._monthly_data["import_peak"]
             monthly_offpeak = self._monthly_data["import_offpeak"]
-
-            # Update daily data (always set to current delta from midnight)
-            if daily_import_delta >= 0:  # Handle meter resets
-                self._daily_data["import_total"] = daily_import_delta
-                if self._tou_enabled:
-                    # Estimate peak/offpeak split for today based on current period
-                    # This is approximate - we don't track historical intraday splits
-                    if self._is_peak_period(now, is_holiday):
-                        # Rough estimate: assume proportional to monthly ratio
-                        if monthly_import > 0:
-                            peak_ratio = monthly_peak / monthly_import
-                        else:
-                            peak_ratio = 0.6
-                        self._daily_data["import_peak"] = daily_import_delta * peak_ratio
-                        self._daily_data["import_offpeak"] = daily_import_delta * (1 - peak_ratio)
-                    else:
-                        if monthly_import > 0:
-                            offpeak_ratio = monthly_offpeak / monthly_import
-                        else:
-                            offpeak_ratio = 0.4
-                        self._daily_data["import_peak"] = daily_import_delta * (1 - offpeak_ratio)
-                        self._daily_data["import_offpeak"] = daily_import_delta * offpeak_ratio
-            
-            if daily_export_delta >= 0:
-                self._daily_data["export_total"] = daily_export_delta
 
             # Determine day status (Weekday/Weekend/Holiday)
             if is_holiday:
@@ -1525,15 +1525,19 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         return day_changed
 
     def _create_day_bucket(self, now: datetime) -> Dict[str, Any]:
-        """Create new daily data bucket."""
+        """Create new daily data bucket.
+        
+        Daily totals are accumulated via deltas (like monthly), ensuring:
+        - import_peak + import_offpeak == import_total (within rounding)
+        - Accurate ToU split based on actual usage timing
+        """
         return {
             "date": now.date().isoformat(),
             "import_total": 0.0,
             "export_total": 0.0,
             "import_peak": 0.0,
             "import_offpeak": 0.0,
-            "import_start": self._get_entity_state(self._import_entity, "Import entity", is_optional=False),
-            "export_start": self._get_entity_state(self._export_entity, "Export entity", is_optional=True),
+            "last_update_ts": now.isoformat(),  # For boundary-aware delta splitting
         }
 
     def _compute_delta(self, current_value: float, last_key: str) -> float:
@@ -1678,6 +1682,114 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         # Weekday 2PM-10PM is peak
         current_time = timestamp.time()
         return PEAK_START <= current_time < PEAK_END
+
+    def _split_delta_by_period(
+        self, 
+        delta_kwh: float, 
+        start_ts: datetime, 
+        end_ts: datetime, 
+        is_holiday: bool
+    ) -> Tuple[float, float]:
+        """Split an energy delta into peak and off-peak portions based on time interval.
+        
+        Handles boundary crossings (2PM, 10PM) by allocating delta proportionally
+        by time spent in each period. Assumes uniform usage rate within interval.
+        
+        Args:
+            delta_kwh: Total energy delta to split
+            start_ts: Start of the interval
+            end_ts: End of the interval
+            is_holiday: Whether the interval is during a holiday
+            
+        Returns:
+            Tuple of (peak_kwh, offpeak_kwh) where peak + offpeak == delta_kwh
+        """
+        if delta_kwh <= 0:
+            return (0.0, 0.0)
+        
+        # If holiday or weekend, all is off-peak
+        if is_holiday or start_ts.weekday() >= 5:
+            return (0.0, delta_kwh)
+        
+        # Edge case: end_ts before or equal to start_ts
+        if end_ts <= start_ts:
+            # Use end_ts period classification
+            if self._is_peak_period(end_ts, is_holiday):
+                return (delta_kwh, 0.0)
+            else:
+                return (0.0, delta_kwh)
+        
+        total_seconds = (end_ts - start_ts).total_seconds()
+        if total_seconds <= 0:
+            # Fallback: classify by end timestamp
+            if self._is_peak_period(end_ts, is_holiday):
+                return (delta_kwh, 0.0)
+            else:
+                return (0.0, delta_kwh)
+        
+        # Calculate seconds spent in peak vs off-peak
+        peak_seconds = 0.0
+        current = start_ts
+        
+        # Walk through the interval, finding boundary crossings
+        while current < end_ts:
+            # Find next boundary (2PM or 10PM on same day, or midnight)
+            current_date = current.date()
+            peak_start_dt = datetime.combine(current_date, PEAK_START)
+            peak_end_dt = datetime.combine(current_date, PEAK_END)
+            midnight_dt = datetime.combine(current_date + timedelta(days=1), time(0, 0))
+            
+            # Make datetimes timezone-aware if current is aware
+            if current.tzinfo is not None:
+                peak_start_dt = peak_start_dt.replace(tzinfo=current.tzinfo)
+                peak_end_dt = peak_end_dt.replace(tzinfo=current.tzinfo)
+                midnight_dt = midnight_dt.replace(tzinfo=current.tzinfo)
+            
+            # Determine if current moment is in peak
+            in_peak = self._is_peak_period(current, is_holiday)
+            
+            # Find the next boundary we might cross
+            if in_peak:
+                # Currently in peak, next boundary is peak_end or end_ts
+                next_boundary = min(peak_end_dt, end_ts)
+            else:
+                # Currently off-peak
+                if current.time() < PEAK_START:
+                    # Before peak window, next boundary is peak_start or end_ts
+                    next_boundary = min(peak_start_dt, end_ts)
+                else:
+                    # After peak window (>= 10PM), next boundary is midnight or end_ts
+                    next_boundary = min(midnight_dt, end_ts)
+            
+            # Ensure we don't go backwards
+            if next_boundary <= current:
+                next_boundary = end_ts
+            
+            # Calculate time in this segment
+            segment_seconds = (next_boundary - current).total_seconds()
+            if in_peak:
+                peak_seconds += segment_seconds
+            
+            current = next_boundary
+            
+            # Safety: if we somehow get stuck, break
+            if segment_seconds <= 0 and current < end_ts:
+                break
+        
+        # Calculate proportions
+        offpeak_seconds = total_seconds - peak_seconds
+        
+        if total_seconds > 0:
+            peak_kwh = delta_kwh * (peak_seconds / total_seconds)
+            offpeak_kwh = delta_kwh * (offpeak_seconds / total_seconds)
+        else:
+            # Fallback
+            if self._is_peak_period(end_ts, is_holiday):
+                peak_kwh, offpeak_kwh = delta_kwh, 0.0
+            else:
+                peak_kwh, offpeak_kwh = 0.0, delta_kwh
+        
+        return (peak_kwh, offpeak_kwh)
 
     def _lookup_ict_rate_tou(self, import_kwh: float) -> float:
         """Lookup ICT rate for ToU calculation - uses >= logic.
@@ -2875,7 +2987,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "4.4.3",
+            "sw_version": "4.4.4",
         }
 
     @property

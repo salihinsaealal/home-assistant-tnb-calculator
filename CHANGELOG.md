@@ -2,6 +2,31 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [4.4.4] - 2025-12-18
+
+### Fixed
+- **Accurate Daily Peak/Off-Peak Tracking**
+  - `sensor.tnb_calculator_today_import_peak_kwh` and `sensor.tnb_calculator_today_import_offpeak_kwh` now show **actual usage timing**, not estimates.
+  - **Always true:** `today_import_peak_kwh + today_import_offpeak_kwh == today_import_kwh` (within rounding).
+
+### Added
+- **Delta-Based Daily Accumulation**
+  - Daily totals now accumulate from deltas (like monthly), ensuring accuracy across restarts.
+  - New `_split_delta_by_period()` helper for boundary-aware peak/off-peak allocation.
+
+- **Boundary-Aware Splitting**
+  - Correctly handles 2PM and 10PM boundary crossings within update intervals.
+  - Properly splits energy when an update spans peak/off-peak transition.
+  - Weekends and holidays are fully off-peak (uses same logic as `peak_period` sensor).
+
+### Changed
+- **`today_cost_tou`** now uses the corrected daily peak/off-peak split for more accurate cost calculation.
+- Daily bucket no longer stores `import_start`/`export_start`; uses `last_update_ts` for boundary tracking.
+
+### Unchanged
+- Monthly calculations (`import_peak_energy`, `import_offpeak_energy`, `total_cost_tou`, `total_cost_non_tou`) remain unchanged.
+- AFA optimization logic remains unchanged.
+
 ## [4.4.3] - 2025-12-18
 
 ### Added

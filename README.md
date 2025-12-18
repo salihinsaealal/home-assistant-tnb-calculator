@@ -18,7 +18,32 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v4.4.3
+## ⭐ What's New in v4.4.4
+
+### ⚡ Accurate Daily Peak/Off-Peak Tracking
+
+The daily ToU sensors now show **actual usage timing**, not estimates:
+
+- **True Delta-Based Daily Split**
+  - `sensor.tnb_calculator_today_import_peak_kwh` — Today's import during peak hours
+  - `sensor.tnb_calculator_today_import_offpeak_kwh` — Today's import during off-peak hours
+  - **Always true:** `today_import_peak_kwh + today_import_offpeak_kwh == today_import_kwh` (within rounding)
+
+- **Boundary-Aware Splitting**
+  - Correctly handles 2PM and 10PM boundary crossings within update intervals
+  - Properly splits energy when an update spans peak/off-peak transition
+  - Weekends and holidays are fully off-peak
+
+- **More Accurate `Today Cost (ToU)`**
+  - Now uses the corrected daily peak/off-peak split for cost calculation
+
+### What Changed
+- Daily sensors now accumulate from deltas (like monthly), not from ratio estimates
+- `_split_delta_by_period()` helper ensures accurate time-based allocation
+- Monthly calculations remain unchanged
+
+<details>
+  <summary><strong>v4.4.3 release notes</strong></summary>
 
 ### 🎯 Separate ToU & Non-ToU Recommendations + Smart Stay Put
 
@@ -42,14 +67,7 @@ Major improvements to the AFA optimization sensors:
   - Rates now use 3 decimal places for precision.
   - Backward-compatible aliases retained.
 
-### Rate-Based Labels
-
-- `saves_money` — Using more actually reduces your bill (weird zone)
-- `super_value` — Extra kWh costs ≤25% of your average rate
-- `value` — Extra kWh costs ≤60% of your average rate
-- `stay_put` — Near threshold but not worth adding kWh
-- `normal` — Extra kWh costs around your average rate
-- `expensive` — Extra kWh costs more than your average rate
+</details>
 
 <details>
   <summary><strong>v4.4.2 release notes</strong></summary>
@@ -528,6 +546,7 @@ This integration is open source. Feel free to modify and share.
 
 ## Version History
 
+- v4.4.4: Accurate daily peak/off-peak tracking (delta-based, boundary-aware splitting)
 - v4.4.3: Separate ToU/non-ToU recommendation entities, Option B gating, stay_put zone, normalized attribute keys
 - v4.4.2: Smarter AFA optimization with marginal rate analysis (practical targets, rate-based labels)
 - v4.4.1: AFA optimization sensors + dashboard + automation examples
