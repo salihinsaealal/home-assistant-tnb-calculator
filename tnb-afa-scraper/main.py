@@ -1,16 +1,21 @@
 """
-TNB AFA Rate Scraper API
+TNB AFA Rate Scraper API v3.0
 
-Caching Strategy:
-- Scrapes TNB website on startup and twice monthly (1st & 25th at 6am)
-- Caches results to JSON file for instant API responses
-- /afa/simple returns cached data with last_scraped timestamp
-- /afa/refresh forces a re-scrape
+Smart Caching Strategy:
+- Scrapes TNB website on startup (if no cache)
+- Monthly schedule: 1st of month at 6am
+- Smart skipping: Skips scrape if cache has current + next 2 months
+- Auto-retry: Retries every 6 hours on failure (max 4 attempts)
+- Data validation: Validates scraped data before caching
+- Keeps old cache if new scrape fails validation
 
+Endpoints:
 GET /           -> health check
-GET /afa/simple -> { "afa_rate": <RM/kWh>, "effective_date": "...", "last_scraped": "..." }
-GET /afa/refresh -> force re-scrape and return new data
-GET /afa/debug  -> debug info (triggers live scrape)
+GET /health     -> detailed monitoring status
+GET /afa/simple -> cached current month rate
+GET /complete   -> all rates + tariffs (cached)
+GET /refresh    -> force re-scrape
+GET /debug      -> debug info (triggers live scrape)
 """
 
 import asyncio
@@ -37,6 +42,15 @@ AFA_URL = "https://www.mytnb.com.my/tariff/index.html#afa"
 # Global cache (in-memory, backed by file)
 _cache: Dict[str, Any] = {}
 _scheduler_task: Optional[asyncio.Task] = None
+
+# Retry state for smart scheduling
+_retry_state: Dict[str, Any] = {
+    "last_attempt": None,
+    "consecutive_failures": 0,
+    "last_success": None,
+    "last_scrape_duration": 0.0,
+    "rates_found_count": 0,
+}
 
 
 def _load_cache() -> Dict[str, Any]:
@@ -67,58 +81,220 @@ def _save_cache(data: Dict[str, Any]) -> None:
         logger.error("Failed to save cache: %s", e)
 
 
+def _validate_rates(all_rates: List[Dict[str, Any]]) -> Tuple[bool, str]:
+    """
+    Validate scraped AFA rates.
+    
+    Returns:
+        Tuple of (is_valid, reason)
+    """
+    if not all_rates:
+        return False, "No rates found"
+    
+    # Check if current month rate exists
+    now = datetime.now()
+    current_month_rates = [
+        r for r in all_rates 
+        if r["year"] == now.year and r["start_month"] == now.month
+    ]
+    
+    if not current_month_rates:
+        # Check if we have previous month (might be published late)
+        logger.warning(f"Current month ({now.year}-{now.month:02d}) rate not found in scraped data")
+        # This is a warning, not a failure - TNB might publish late on 1st
+    
+    # Check if we have at least 1 rate
+    if len(all_rates) < 1:
+        return False, "Less than 1 rate found"
+    
+    logger.info(f"Validation passed: {len(all_rates)} rates found")
+    return True, "OK"
+
+
+def _check_need_scrape() -> Tuple[bool, str]:
+    """
+    Check if we need to scrape based on cache status.
+    
+    Returns:
+        Tuple of (should_scrape, reason)
+    """
+    now = datetime.now()
+    
+    # No cache at all
+    if not _cache:
+        return True, "No cache exists"
+    
+    # Missing current month rate (emergency)
+    if "all_rates" in _cache:
+        current_month_rates = [
+            r for r in _cache["all_rates"]
+            if r["year"] == now.year and r["start_month"] == now.month
+        ]
+        if not current_month_rates:
+            return True, "Missing current month rate"
+    
+    # Check if we have sufficient future data (current + next 2 months)
+    if "all_rates" in _cache:
+        future_months = set()
+        for r in _cache["all_rates"]:
+            rate_date = datetime(r["year"], r["start_month"], 1)
+            if rate_date >= now:
+                future_months.add((r["year"], r["start_month"]))
+        
+        # If we have 3+ future months, we're good
+        if len(future_months) >= 3:
+            logger.info(f"Cache has {len(future_months)} future months, skipping scrape")
+            return False, f"Sufficient data ({len(future_months)} future months)"
+    
+    # Cache is too old (backup safety - 30 days)
+    if "last_scraped" in _cache:
+        try:
+            last_scraped = datetime.fromisoformat(_cache["last_scraped"])
+            days_old = (now - last_scraped).days
+            if days_old > 30:
+                return True, f"Cache older than 30 days ({days_old} days)"
+        except Exception:
+            return True, "Invalid last_scraped timestamp"
+    
+    return False, "Cache is sufficient"
+
+
 async def _scheduled_scraper():
-    """Background task that scrapes on 1st and 25th of each month at 6am."""
+    """
+    Smart background scheduler:
+    - Scrape on 1st of month at 6am
+    - Retry every 6 hours if failed (max 4 attempts = 24h)
+    - Skip if we have current + next 2 months in cache
+    - Emergency scrape if current month is missing
+    """
+    global _retry_state
+    
     while True:
         now = datetime.now()
-        # Check if today is 1st or 25th and it's around 6am
-        if now.day in (1, 25) and now.hour == 6:
-            logger.info("Scheduled scrape triggered (day=%d)", now.day)
+        
+        # Check if we need to scrape
+        should_scrape = False
+        reason = ""
+        
+        # Reason 1: It's the 1st of the month at 6am (primary schedule)
+        if now.day == 1 and now.hour == 6:
+            # Check if we actually need to scrape (might have sufficient data)
+            need_scrape, check_reason = _check_need_scrape()
+            if need_scrape:
+                should_scrape = True
+                reason = f"Monthly scheduled scrape: {check_reason}"
+            else:
+                logger.info(f"Skipping monthly scrape: {check_reason}")
+        
+        # Reason 2: We have pending retries (failed scrape within 24h)
+        elif _retry_state["consecutive_failures"] > 0:
+            last_attempt = _retry_state.get("last_attempt")
+            if last_attempt:
+                hours_since = (now - last_attempt).total_seconds() / 3600
+                if hours_since >= 6 and _retry_state["consecutive_failures"] < 4:
+                    should_scrape = True
+                    reason = f"Retry attempt {_retry_state['consecutive_failures'] + 1}/4 (last attempt: {hours_since:.1f}h ago)"
+                elif _retry_state["consecutive_failures"] >= 4:
+                    # Max retries reached, reset and wait for next monthly schedule
+                    logger.warning("Max retries (4) reached. Will retry on next monthly schedule.")
+                    _retry_state["consecutive_failures"] = 0
+        
+        # Reason 3: Missing current month rate (emergency scrape)
+        else:
+            need_scrape, check_reason = _check_need_scrape()
+            if need_scrape and "Missing current month" in check_reason:
+                should_scrape = True
+                reason = f"Emergency: {check_reason}"
+        
+        # Perform scrape if needed
+        if should_scrape:
+            logger.info(f"🔄 Scrape triggered: {reason}")
+            _retry_state["last_attempt"] = now
+            
             try:
                 await _do_scrape_and_cache()
             except Exception as e:
-                logger.error("Scheduled scrape failed: %s", e)
+                logger.error(f"Scrape failed: {e}")
         
         # Sleep for 1 hour before checking again
         await asyncio.sleep(3600)
 
 
 async def _do_scrape_and_cache() -> Dict[str, Any]:
-    """Perform scrape and update cache."""
+    """Perform scrape and update cache with validation."""
+    global _retry_state
+    
     logger.info("Starting scrape...")
-    body_text, debug_log = await _scrape_raw()
-    all_rates = _extract_rates(body_text)
-    tariffs = _extract_tariffs(body_text)
+    scrape_start = datetime.now()
     
-    if not all_rates:
-        logger.error("Scrape found no rates!")
-        raise HTTPException(status_code=500, detail="Could not find any AFA rates in page")
-    
-    now = datetime.now()
-    
-    # Pick current month's rate
-    current = _select_current_rate(all_rates, now)
-    
-    cache_data = {
-        "last_scraped": now.isoformat(),
-        "all_rates": all_rates,
-        "tariffs": tariffs,
-        "current_rate": {
-            # Store absolute value (positive) for Home Assistant compatibility
-            # TNB returns negative for rebates, but HA integration expects positive
-            "afa_rate": abs(current["rate_rm"]),
-            "afa_rate_raw": current["rate_rm"],  # Keep original for reference
-            "effective_date": f"{current['year']:04d}-{current['start_month']:02d}-01",
-            "period": current["period"],
-            "rate_sen": current["rate_sen"],
-        },
-    }
-    
-    _save_cache(cache_data)
-    logger.info("Scrape complete. Current rate: %.4f RM/kWh for %s", 
-               current["rate_rm"], current["period"])
-    
-    return cache_data
+    try:
+        body_text, debug_log = await _scrape_raw()
+        all_rates = _extract_rates(body_text)
+        tariffs = _extract_tariffs(body_text)
+        
+        # Measure scrape duration
+        scrape_duration = (datetime.now() - scrape_start).total_seconds()
+        _retry_state["last_scrape_duration"] = scrape_duration
+        _retry_state["rates_found_count"] = len(all_rates)
+        
+        # Validate the scraped data
+        is_valid, validation_msg = _validate_rates(all_rates)
+        
+        if not is_valid:
+            logger.error(f"Scrape validation failed: {validation_msg}")
+            _retry_state["consecutive_failures"] += 1
+            
+            # Keep old cache if validation fails
+            if _cache:
+                logger.warning("Keeping old cache due to validation failure")
+                return _cache
+            else:
+                raise HTTPException(status_code=500, detail=f"Scrape validation failed: {validation_msg}")
+        
+        now = datetime.now()
+        
+        # Pick current month's rate
+        current = _select_current_rate(all_rates, now)
+        
+        cache_data = {
+            "last_scraped": now.isoformat(),
+            "all_rates": all_rates,
+            "tariffs": tariffs,
+            "current_rate": {
+                # Store absolute value (positive) for Home Assistant compatibility
+                # TNB returns negative for rebates, but HA integration expects positive
+                "afa_rate": abs(current["rate_rm"]),
+                "afa_rate_raw": current["rate_rm"],  # Keep original for reference
+                "effective_date": f"{current['year']:04d}-{current['start_month']:02d}-01",
+                "period": current["period"],
+                "rate_sen": current["rate_sen"],
+            },
+        }
+        
+        _save_cache(cache_data)
+        
+        # Update success metrics
+        _retry_state["consecutive_failures"] = 0
+        _retry_state["last_success"] = now
+        
+        logger.info("Scrape complete in %.2fs. Found %d rates. Current rate: %.4f RM/kWh for %s", 
+                   scrape_duration, len(all_rates), cache_data["current_rate"]["afa_rate"],
+                   cache_data["current_rate"]["period"])
+        
+        return cache_data
+        
+    except Exception as e:
+        scrape_duration = (datetime.now() - scrape_start).total_seconds()
+        _retry_state["last_scrape_duration"] = scrape_duration
+        _retry_state["consecutive_failures"] += 1
+        logger.error(f"Scrape failed after {scrape_duration:.2fs}: {e}")
+        
+        # Keep old cache if scrape fails
+        if _cache:
+            logger.warning("Keeping old cache due to scrape failure")
+            return _cache
+        else:
+            raise
 
 
 def _select_current_rate(all_rates: List[Dict], now: datetime) -> Dict[str, Any]:
@@ -347,8 +523,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="TNB AFA Rate Scraper",
-    description="Scrapes myTNB tariff page for AFA rates with caching",
-    version="2.0.0",
+    description="Scrapes myTNB tariff page for AFA rates with smart caching and validation",
+    version="3.0.0",
     lifespan=lifespan,
 )
 
@@ -359,9 +535,97 @@ async def root() -> Dict[str, Any]:
     return {
         "status": "ok",
         "service": "TNB AFA Rate Scraper",
-        "version": "2.0.0",
+        "version": "3.0.0",
         "cache_loaded": bool(_cache),
         "last_scraped": _cache.get("last_scraped"),
+    }
+
+
+@app.get("/health")
+async def health_check() -> Dict[str, Any]:
+    """
+    Detailed health status for monitoring.
+    
+    Returns comprehensive status including:
+    - Current month rate availability
+    - Future months in cache
+    - Scrape metrics
+    - Retry state
+    """
+    now = datetime.now()
+    
+    # Check current month rate
+    current_month_exists = False
+    future_months_count = 0
+    current_month_rate = None
+    
+    if _cache and "all_rates" in _cache:
+        for r in _cache["all_rates"]:
+            if r["year"] == now.year and r["start_month"] == now.month:
+                current_month_exists = True
+                current_month_rate = r["rate_sen"]
+            
+            rate_date = datetime(r["year"], r["start_month"], 1)
+            if rate_date >= now:
+                future_months_count += 1
+    
+    # Calculate time since last scrape
+    last_scraped_str = _cache.get("last_scraped") if _cache else None
+    hours_since_scrape = None
+    if last_scraped_str:
+        try:
+            last_scraped = datetime.fromisoformat(last_scraped_str)
+            hours_since_scrape = (now - last_scraped).total_seconds() / 3600
+        except Exception:
+            pass
+    
+    # Calculate time since last success
+    hours_since_success = None
+    if _retry_state.get("last_success"):
+        hours_since_success = (now - _retry_state["last_success"]).total_seconds() / 3600
+    
+    # Determine overall health status
+    if not current_month_exists:
+        status = "critical"
+        message = "Missing current month rate"
+    elif _retry_state["consecutive_failures"] >= 3:
+        status = "warning"
+        message = f"{_retry_state['consecutive_failures']} consecutive scrape failures"
+    elif future_months_count < 2:
+        status = "warning"
+        message = f"Only {future_months_count} future months in cache"
+    else:
+        status = "healthy"
+        message = "All systems operational"
+    
+    return {
+        "status": status,
+        "message": message,
+        "current_month": {
+            "exists": current_month_exists,
+            "rate_sen": current_month_rate,
+            "year": now.year,
+            "month": now.month,
+        },
+        "cache": {
+            "loaded": bool(_cache),
+            "total_rates": len(_cache.get("all_rates", [])),
+            "future_months": future_months_count,
+            "last_scraped": last_scraped_str,
+            "hours_since_scrape": round(hours_since_scrape, 1) if hours_since_scrape else None,
+        },
+        "scraper_metrics": {
+            "consecutive_failures": _retry_state["consecutive_failures"],
+            "last_success": _retry_state["last_success"].isoformat() if _retry_state["last_success"] else None,
+            "hours_since_success": round(hours_since_success, 1) if hours_since_success else None,
+            "last_scrape_duration_sec": round(_retry_state["last_scrape_duration"], 2),
+            "rates_found_last_scrape": _retry_state["rates_found_count"],
+        },
+        "next_scheduled_scrape": {
+            "day_of_month": 1,
+            "hour": 6,
+            "description": "1st of each month at 6am (skips if sufficient data)",
+        },
     }
 
 
@@ -566,8 +830,9 @@ def _extract_rates(text: str) -> List[Dict[str, Any]]:
     """
     Extract rates & periods from body text.
 
-    Looks for lines containing both a month range and a 'sen / kWj' style value.
-    Handles tab-separated columns (e.g., Nov\tDec with rates -8.91\t-6.42).
+    Handles both formats:
+    - Period and rate on SAME line: "1 – 31 Januari 2026 -4.99 sen / kWj"
+    - Period and rate on SEPARATE lines (legacy support)
     """
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     results: List[Dict[str, Any]] = []
@@ -583,16 +848,45 @@ def _extract_rates(text: str) -> List[Dict[str, Any]]:
             in_current_section = True
             continue
 
-        if "unjuran 3-bulan" in lower_line:
+        if "unjuran 3-bulan" in lower_line or "unjuran" in lower_line:
             in_current_section = False
             continue
 
         if not in_current_section:
             continue
 
-        # Look for 'sen / kWj' in the line
+        # Look for 'sen / kWj' or 'sen/kwj' in the line
         if "sen" in lower_line and "kw" in lower_line:
-            # Try to pick the previous line as the period
+            # Skip if this is a header line (contains "Tempoh")
+            if "tempoh" in lower_line:
+                logger.debug(f"Skipping header line: {line}")
+                continue
+            
+            # STRATEGY 1: Try parsing period and rate from SAME line
+            period_info = _parse_period(line)
+            rate_match = re.search(r"(-?\d+\.?\d*)\s*sen", line)
+            
+            if period_info and rate_match:
+                start_month, end_month, year = period_info
+                rate_sen = float(rate_match.group(1))
+                
+                # Extract clean period text (everything before the rate)
+                period_text = line.split(str(rate_match.group(1)))[0].strip()
+                # Remove trailing dashes/whitespace
+                period_text = period_text.rstrip(" –-—\t")
+                
+                results.append({
+                    "period": period_text if period_text else line.split("sen")[0].strip(),
+                    "rate_sen": rate_sen,
+                    "rate_rm": rate_sen / 100.0,
+                    "start_month": start_month,
+                    "end_month": end_month,
+                    "year": year,
+                })
+                logger.debug(f"Parsed (same line): {year}-{start_month:02d} = {rate_sen} sen")
+                continue
+            
+            # STRATEGY 2: Try parsing period from PREVIOUS line (legacy)
             period_line = lines[i - 1] if i > 0 else ""
             
             # Handle tab-separated columns (multiple periods & rates)
@@ -617,6 +911,7 @@ def _extract_rates(text: str) -> List[Dict[str, Any]]:
                                 "year": year,
                             }
                         )
+                        logger.debug(f"Parsed (tab-separated): {year}-{start_month:02d} = {rate_sen} sen")
             else:
                 # Fallback: parse as single line
                 period_info = _parse_period(period_line)
@@ -634,13 +929,38 @@ def _extract_rates(text: str) -> List[Dict[str, Any]]:
                             "year": year,
                         }
                     )
+                    logger.debug(f"Parsed (separate lines): {year}-{start_month:02d} = {rate_sen} sen")
 
     # Pass 2: if we found nothing (maybe headings changed), fall back to
     # scanning the whole page like before.
     if not results:
+        logger.warning("Pass 1 found nothing, trying full-page scan...")
         for i, line in enumerate(lines):
             lower_line = line.lower()
             if "sen" in lower_line and "kw" in lower_line:
+                if "tempoh" in lower_line:
+                    continue
+                
+                # Try same line first
+                period_info = _parse_period(line)
+                rate_match = re.search(r"(-?\d+\.?\d*)\s*sen", line)
+                
+                if period_info and rate_match:
+                    start_month, end_month, year = period_info
+                    rate_sen = float(rate_match.group(1))
+                    period_text = line.split(str(rate_match.group(1)))[0].strip().rstrip(" –-—\t")
+                    
+                    results.append({
+                        "period": period_text if period_text else line.split("sen")[0].strip(),
+                        "rate_sen": rate_sen,
+                        "rate_rm": rate_sen / 100.0,
+                        "start_month": start_month,
+                        "end_month": end_month,
+                        "year": year,
+                    })
+                    continue
+                
+                # Legacy fallback
                 period_line = lines[i - 1] if i > 0 else ""
                 
                 # Handle tab-separated columns
@@ -680,7 +1000,23 @@ def _extract_rates(text: str) -> List[Dict[str, Any]]:
                                 "year": year,
                             }
                         )
-    return results
+    
+    # Filter out spurious entries with parentheses (e.g., "(1 Julai 2025)")
+    # These are usually footnotes or historical references, not current AFA rates
+    filtered_results = [r for r in results if "(" not in r["period"] and ")" not in r["period"]]
+    
+    # Deduplicate results (keep first occurrence)
+    seen = set()
+    unique_results = []
+    for r in filtered_results:
+        key = (r["year"], r["start_month"], r["end_month"])
+        if key not in seen:
+            seen.add(key)
+            unique_results.append(r)
+    
+    logger.info(f"Extracted {len(unique_results)} AFA rates (filtered {len(results) - len(filtered_results)} spurious entries)")
+    
+    return unique_results
 
 
 @app.get("/afa/simple")
