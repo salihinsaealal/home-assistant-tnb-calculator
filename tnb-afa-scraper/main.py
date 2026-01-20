@@ -469,6 +469,7 @@ def _parse_month_year(s: str) -> Optional[Tuple[int, int]]:
     is handled by _parse_period below.
     """
     months = {
+        "januari": 1,
         "january": 1,
         "februari": 2,
         "february": 2,
@@ -510,6 +511,7 @@ def _parse_period(s: str) -> Optional[Tuple[int, int, int]]:
     - "1 Julai – 30 September 2025" -> (7, 9, 2025)
     """
     months = {
+        "januari": 1,
         "january": 1,
         "februari": 2,
         "february": 2,
