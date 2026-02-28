@@ -101,7 +101,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="4.4.5",
+        sw_version="4.4.6",
     )
 
     sensors = [
@@ -2108,8 +2108,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         avg_export_rate_per_kwh = abs(nem_total_uncapped / export_total) if export_total > 0 else 0.0
         nem_excess_kwh = abs(nem_excess_rm) / avg_export_rate_per_kwh if avg_export_rate_per_kwh > 0 else 0.0
         
-        # Final total — NEM capped at E18, taxes always apply
-        e30_final = max(e18_import_charge + e19_st + e20_kw + nem_applied, 0.0)
+        # Final total — NEM capped at E18, taxes always apply on top
+        e30_final = max(e18_import_charge + nem_applied, 0.0) + e19_st + e20_kw
         
         return {
             "total_cost": self._round_currency(e30_final),
@@ -2210,8 +2210,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         avg_export_rate_per_kwh = abs(total_export_uncapped / export_kwh) if export_kwh > 0 else 0.0
         nem_excess_kwh = abs(nem_excess_rm) / avg_export_rate_per_kwh if avg_export_rate_per_kwh > 0 else 0.0
         
-        # Final subtotal — NEM capped at import_base, taxes always apply
-        subtotal = max(import_base + import_taxes + total_export_applied, 0.0)
+        # Final subtotal — NEM capped at import_base, taxes always apply on top
+        subtotal = max(import_base + total_export_applied, 0.0) + import_taxes
         
         return {
             "total_cost": self._round_currency(subtotal),
@@ -3060,7 +3060,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "4.4.5",
+            "sw_version": "4.4.6",
         }
 
     @property

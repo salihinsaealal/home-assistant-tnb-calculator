@@ -2,6 +2,12 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [4.4.6] - 2026-02-28
+
+### Fixed
+- KWTBB and Service Tax are now correctly added outside the NEM floor, ensuring they are always payable even when NEM credits fully offset the base import charge
+- Today cost sensors no longer show zero for solar/NEM users with small daily import
+
 ## [4.4.5] - 2026-02-28
 
 ### Fixed
