@@ -24,16 +24,16 @@ A Home Assistant integration to calculate your TNB (Tenaga Nasional Berhad) elec
 
 ## What's New in v4.0.0
 
-### 🎉 Major Release - Configuration & Calibration Overhaul
+### Major release - configuration and calibration overhaul
 
-- **🔄 Dynamic Configuration Updates**: API key and billing start day changes apply instantly without deleting/re-adding integration
-- **📅 Billing Start Day Status**: New sensor shows `"1 (→ 4 next cycle)"` when changes are pending
-- **⚡ Improved Calibration Services**: Distribution options reordered with **Auto** as default, clearer delay information
-- **🔧 Service Fixes**: All calibration services now work correctly with proper refresh handling
-- **📊 Better UX**: Pending configuration changes visible in sensor attributes and status displays
+- Dynamic configuration updates: API key and billing start day changes apply instantly without deleting/re-adding the integration.
+- Billing start day status: sensor shows `"1 (-> 4 next cycle)"` when changes are pending.
+- Improved calibration services: distribution options reordered with Auto as default, and clearer delay information.
+- Service fixes: all calibration services work correctly with proper refresh handling.
+- Better UX: pending configuration changes are visible in sensor attributes and status displays.
 
 ### Dashboard Usage
-1. Install Bubble Card and ApexCharts Card (through HACS or manual resources) and add them under *Settings → Dashboards → Resources*.
+1. Install Bubble Card and ApexCharts Card (through HACS or manual resources) and add them under Settings -> Dashboards -> Resources.
 2. Copy `dashboards/tnb_calculator_dashboard.yaml` into your dashboard configuration.
 3. Either create a dedicated dashboard with the file content or merge its `views:` block with an existing dashboard.
 4. Adjust entity IDs only if you renamed the default sensors.
@@ -70,16 +70,16 @@ Use the `afa_rate` field (can be negative for rebates) with the `tnb_calculator.
 
 1. Copy the blueprint file to your Home Assistant config:
 
-   ```text
+ ```text
    /config/blueprints/automation/tnb_calculator/auto_update_afa_rate.yaml
    ```
 
-2. In Home Assistant, go to **Settings → Automations & Scenes → Blueprints**.
-3. Select **"TNB Calculator – Auto Update AFA Rate"** → **Create automation from blueprint**.
+2. In Home Assistant, go to Settings -> Automations & Scenes -> Blueprints.
+3. Select "TNB Calculator - Auto Update AFA Rate" and choose Create automation from blueprint.
 4. Configure:
-   - **Scraper API URL**: `http://<N150-IP>:8001/afa/simple`
-   - **Time of day**: e.g. `00:10:00`
-   - **Day of month**: e.g. `1`
+ - **Scraper API URL**: `http://<N150-IP>:8001/afa/simple`
+ - **Time of day**: e.g. `00:10:00`
+ - **Day of month**: e.g. `1`
 
 The automation will call `tnb_calculator.fetch_afa_rate` monthly with the scraper URL and update the AFA rate automatically.
 
@@ -89,10 +89,10 @@ The automation will call `tnb_calculator.fetch_afa_rate` monthly with the scrape
 2. Click "Add Integration"
 3. Search for "TNB Calculator"
 4. Follow the setup steps:
-   - Select your **import energy sensor** (required)
-   - Select your **export energy sensor** (optional, for solar users)
-   - **Optional**: Enter your Calendarific API key to enable ToU calculations
-   - Get a free API key from [Calendarific.com](https://calendarific.com)
+ - Select your **import energy sensor** (required)
+ - Select your **export energy sensor** (optional, for solar users)
+ - **Optional**: Enter your Calendarific API key to enable ToU calculations
+ - Get a free API key from [Calendarific.com](https://calendarific.com)
 
 ## Requirements
 
@@ -111,7 +111,7 @@ After setup, these sensors will be created:
 - **Total Cost (ToU/Non-ToU)**: Your monthly TNB bill
 - **Import/Export Energy**: Monthly electricity flow in kWh
 - **Net Energy**: Net consumption (Import - Export)
-- **Predicted Monthly Cost**: Smart forecast with ±5% tolerance
+- **Predicted Monthly Cost**: Smart forecast with 5% tolerance
 - **Today Import/Export/Cost**: Real-time daily tracking
 
 ### Status & Automation

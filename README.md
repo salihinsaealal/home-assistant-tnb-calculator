@@ -18,35 +18,35 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v4.4.5
+## What's New in v4.4.5
 
-### ☀️ Solar / NEM Billing Accuracy Fixes
+### Solar / NEM billing accuracy
 
-- **No more negative bills**: NEM export credits are capped at import base charges (matches TNB billing).
-- **New sensor**: `sensor.tnb_calculator_nem_excess_kwh` tracks excess NEM credit (kWh) carried forward.
-- **Persistent NEM balance**: Excess credit rolls across months (like TNB) and can be calibrated via service.
+- NEM export credits are capped at import base charges (prevents negative bills; matches TNB billing).
+- New sensor: `sensor.tnb_calculator_nem_excess_kwh` (excess NEM credit carried forward in kWh).
+- NEM excess balance is persisted across months and can be calibrated via service.
 
-### 🧾 Monthly Bill History + Calibration
+### Monthly bill history and calibration
 
-- **New sensor**: `sensor.tnb_calculator_monthly_bill` (state=current month cost).
-- **History in attributes**: last 12 months available via `monthly_history` attribute.
-- **New service**: `tnb_calculator.calibrate_monthly_cost` stores actual bill for current or historical months.
+- New sensor: `sensor.tnb_calculator_monthly_bill` (state is current month cost).
+- Last 12 months are available in the `monthly_history` attribute.
+- New service: `tnb_calculator.calibrate_monthly_cost` stores the actual bill for current or historical months.
 
-### ⚡ Accurate Daily Peak/Off-Peak Tracking
+### Accurate daily peak/off-peak tracking
 
 The daily ToU sensors now show **actual usage timing**, not estimates:
 
-- **True Delta-Based Daily Split**
-  - `sensor.tnb_calculator_today_import_peak_kwh` — Today's import during peak hours
-  - `sensor.tnb_calculator_today_import_offpeak_kwh` — Today's import during off-peak hours
+- True delta-based daily split
+  - `sensor.tnb_calculator_today_import_peak_kwh` - Today's import during peak hours
+  - `sensor.tnb_calculator_today_import_offpeak_kwh` - Today's import during off-peak hours
   - **Always true:** `today_import_peak_kwh + today_import_offpeak_kwh == today_import_kwh` (within rounding)
 
-- **Boundary-Aware Splitting**
+- Boundary-aware splitting
   - Correctly handles 2PM and 10PM boundary crossings within update intervals
   - Properly splits energy when an update spans peak/off-peak transition
   - Weekends and holidays are fully off-peak
 
-- **More Accurate `Today Cost (ToU)`**
+- More accurate `Today Cost (ToU)`
   - Now uses the corrected daily peak/off-peak split for cost calculation
 
 ### What Changed
@@ -55,23 +55,23 @@ The daily ToU sensors now show **actual usage timing**, not estimates:
 - Monthly calculations remain unchanged
 
 <details>
-  <summary><strong>v4.4.3 release notes</strong></summary>
+ <summary><strong>v4.4.3 release notes</strong></summary>
 
-### 🎯 Separate ToU & Non-ToU Recommendations + Smart Stay Put
+### Separate ToU and non-ToU recommendations + smart stay put
 
 Major improvements to the AFA optimization sensors:
 
 - **Separate Entities for ToU and Non-ToU**
-  - `sensor.tnb_calculator_ideal_import_kwh_tou` — ToU-specific recommendation
-  - `sensor.tnb_calculator_ideal_import_kwh_non_tou` — Non-ToU recommendation
-  - Each model computes its own target independently — no more forced agreement.
+  - `sensor.tnb_calculator_ideal_import_kwh_tou` - ToU-specific recommendation
+  - `sensor.tnb_calculator_ideal_import_kwh_non_tou` - Non-ToU recommendation
+  - Each model computes its own target independently; no forced agreement.
 
 - **Option B Gating: Only Recommend When It's Value**
   - Only recommends increasing usage if label is `saves_money`, `super_value`, or `value`.
   - If extra kWh isn't worth it (`normal`/`expensive`), the sensor stays at your current usage.
 
 - **New `stay_put` Zone**
-  - When you're near the 550–600 kWh band but extra kWh isn't good value, zone becomes `stay_put`.
+  - When you're near the 550-600 kWh band but extra kWh isn't good value, zone becomes `stay_put`.
   - Clear messaging: "No value in adding kWh."
 
 - **Normalized Attribute Keys**
@@ -82,17 +82,17 @@ Major improvements to the AFA optimization sensors:
 </details>
 
 <details>
-  <summary><strong>v4.4.2 release notes</strong></summary>
+ <summary><strong>v4.4.2 release notes</strong></summary>
 
-### 🎯 Smarter AFA Optimization with Marginal Rate Analysis
+### Smarter AFA optimization with marginal rate analysis
 
 The AFA optimization sensors now use a **practical, rate-based approach** to help you make informed decisions:
 
 - **Recommended Target Import** (not theoretical minimum)
   - `sensor.tnb_calculator_ideal_import_kwh`
-    - Now shows a **practical target** in the 550–600 kWh range based on **lowest marginal cost**.
-    - Target is always **>= your current import** (no impractical "use 0 kWh" suggestions).
-    - Attributes include: `avg_rate_now`, `avg_rate_target`, `marginal_rate_to_target`, and both ToU/non-ToU metrics.
+  - Now shows a practical target in the 550-600 kWh range based on lowest marginal cost.
+  - Target is always **>= your current import** (no impractical "use 0 kWh" suggestions).
+  - Attributes include: `avg_rate_now`, `avg_rate_target`, `marginal_rate_to_target`, and both ToU/non-ToU metrics.
 
 - **Rich Attributes on All Optimization Sensors**
   - Both **ToU** and **non-ToU** metrics exposed for comparison.
@@ -101,18 +101,18 @@ The AFA optimization sensors now use a **practical, rate-based approach** to hel
 </details>
 
 <details>
-  <summary><strong>Older release notes</strong></summary>
+ <summary><strong>Older release notes</strong></summary>
 
-## ⭐ What's New in v4.3.5
+## What's New in v4.3.5
 
-### 🔁 Weekly Auto-Fetch & AFA API URL
+### Weekly auto-fetch and AFA API URL
 
 - **Weekly AFA-only auto-refresh**:
   - When AFA source is `api` and the full-tariff auto-fetch switch is **OFF**, the integration re-fetches the AFA rate at most **once per week**.
   - URL priority:
-    1. Integration option `tariff_api_url` (configured in the UI).
-    2. Last-used URL stored in `_tariff_overrides["api_url"]`.
-    3. Default fallback: `https://tnb.cikgusaleh.work/afa/simple`.
+ 1. Integration option `tariff_api_url` (configured in the UI).
+ 2. Last-used URL stored in `_tariff_overrides["api_url"]`.
+ 3. Default fallback: `https://tnb.cikgusaleh.work/afa/simple`.
   - Failures are logged but the previous AFA rate is kept.
 - **Weekly full-tariff auto-refresh** (recap):
   - When `switch.tnb_calculator_auto_fetch_tariffs` is ON, tariffs from `/complete` are refreshed at most once per week.
@@ -122,15 +122,15 @@ The AFA optimization sensors now use a **practical, rate-based approach** to hel
   - Lets you view/edit the AFA API URL directly in Home Assistant.
   - Attributes show `current_url`, `default_url`, and `effective_url`.
 
-### 🧾 State-Only Energy Entity Support
+### State-only energy entity support
 
 - Import/export energy entities **no longer need an entity registry entry**.
 - If an energy sensor only exists in `hass.states` (no `unique_id`), the config flow uses a **relaxed validation path** based on state attributes (domain, unit, numeric value).
 - Existing users with registry-based entities are unaffected; this change only enables additional setups that previously failed validation.
 
-## ⭐ What's New in v4.3.2
+## What's New in v4.3.2
 
-### 🧮 Dynamic Tariffs from Scraper (Complete API)
+### Dynamic tariffs from scraper (complete API)
 
 - **Full tariff table from API**: Integration can now consume the `/complete` endpoint from the external scraper (`https://tnb.cikgusaleh.work/complete`) and store:
   - AFA (current + periods)
@@ -143,7 +143,7 @@ The AFA optimization sensors now use a **practical, rate-based approach** to hel
   - `_calculate_tou_costs` and `_calculate_non_tou_costs` now use stored tariffs when available.
   - If no API data is present, integration safely falls back to the original hardcoded tariffs.
 
-### 🔘 Auto Fetch Tariffs Switch (Experimental)
+### Auto fetch tariffs switch (experimental)
 
 - New switch entity: `switch.tnb_calculator_auto_fetch_tariffs`.
 - **OFF (default)**: Uses hardcoded tariff values (exactly like older versions).
@@ -155,7 +155,7 @@ The AFA optimization sensors now use a **practical, rate-based approach** to hel
   - Resets **all** tariff overrides (including AFA) back to hardcoded defaults.
   - Ensures a clean, known-good baseline if anything looks wrong.
 
-### 💱 Proper Currency Handling (MYR)
+### Proper currency handling (MYR)
 
 - All cost sensors now use:
   - `unit_of_measurement: "MYR"`
@@ -163,7 +163,7 @@ The AFA optimization sensors now use a **practical, rate-based approach** to hel
 - All rate sensors use `MYR/kWh` instead of `RM/kWh`.
 - This matches ISO-4217 and allows Home Assistant to correctly detect monetary sensors.
 
-### 🔄 Refined AFA Services
+### Refined AFA services
 
 - `set_tariff_rates` / `fetch_tariff_rates` have been split and clarified into:
   - `set_afa_rate`: manual AFA override (can be negative for rebates).
@@ -171,9 +171,9 @@ The AFA optimization sensors now use a **practical, rate-based approach** to hel
   - `fetch_all_rates`: fetch full tariff table from `/complete`.
 - Reset service updated to `reset_tariff_rates` to reset **all** tariffs (not just AFA).
 
-## ⭐ What's New in v4.1.1
+## What's New in v4.1.1
 
-### 🔄 Dynamic AFA Rate Management (API & Scraper Ready)
+### Dynamic AFA rate management (API and scraper)
 
 - **Configurable AFA Rate**: AFA (Additional Fuel Adjustment) rate is configurable via services and stored in persistent storage.
 - **Multiple Sources**: AFA rate can come from:
@@ -186,20 +186,20 @@ The AFA optimization sensors now use a **practical, rate-based approach** to hel
 - **Automation Blueprint**: Bundle includes an automation blueprint to call the AFA fetch service monthly using the scraper URL.
 - **AFA Sign Handling**: Scraper returns the AFA rate with the original sign (negative = rebate, positive = surcharge), and the integration applies it directly.
 
-## ⭐ What's New in v4.0.0
+## What's New in v4.0.0
 
-### 🎉 Major Release - Configuration & Calibration Overhaul
+### Major release - configuration and calibration overhaul
 
-- **🔄 Dynamic Configuration Updates**: API key and billing start day changes apply instantly without deleting/re-adding integration
-  - Add Calendarific API key via Configure → ToU mode activates immediately
-  - Change billing start day → updates at next cycle with clear pending indicator
-- **📅 Billing Start Day Status**: New sensor shows `"1 (→ 4 next cycle)"` when changes are pending
-- **⚡ Improved Calibration Services**: 
-  - Distribution options reordered: **Auto** (default) → Peak → Off-Peak → Proportional → Manual
+- Dynamic configuration updates: API key and billing start day changes apply instantly without deleting/re-adding the integration.
+  - Add Calendarific API key via Configure -> ToU mode activates immediately.
+  - Change billing start day -> updates at next cycle with a clear pending indicator.
+- Billing start day status: sensor shows `"1 (-> 4 next cycle)"` when changes are pending.
+- Improved calibration services:
+  - Distribution options reordered: Auto (default), Peak, Off-Peak, Proportional, Manual.
   - Clear delay information: "Values update immediately in storage but sensor display has a delay"
   - Simplified UI with cleaner descriptions
-- **🔧 Service Fixes**: All calibration services now work correctly with proper refresh handling
-- **📊 Better UX**: Pending configuration changes visible in sensor attributes and status displays
+- ** Service Fixes**: All calibration services now work correctly with proper refresh handling
+- ** Better UX**: Pending configuration changes visible in sensor attributes and status displays
 
 </details>
 
@@ -227,7 +227,7 @@ data:
   year: 2025           # Optional: billing year
 ```
 - The integration logs the comparison and posts a notification showing the calculated cost, actual bill, absolute difference, and percentage variance.
-- If the difference exceeds ±5%, the notification highlights it so you can investigate.
+- If the difference exceeds 5%, the notification highlights it so you can investigate.
 
 ### NEM & Bill Calibration
 
@@ -287,10 +287,10 @@ Similar services available for export energy (solar users):
 - `tnb_calculator.set_export_energy_values`
 - `tnb_calculator.adjust_export_energy_values`
 
-**⏱️ Note on Calibration Delays:**
+**Note on calibration delays:**
 - Values update **immediately in storage**
 - Sensor display updates on next coordinator refresh (~5 minutes)
-- For **instant sensor refresh**, reload the integration via Settings → Devices & Services → TNB Calculator → Reload
+- For instant refresh, reload the integration via Settings -> Devices & Services -> TNB Calculator -> Reload.
 
 ### Reset Storage
 
@@ -329,9 +329,9 @@ data:
 1. Select your **import energy sensor** (required)
 2. Select your **export energy sensor** (optional, for solar users)
 3. **Optional**: Enter your Calendarific API key to enable ToU calculations
-   - Get a free API key from [Calendarific.com](https://calendarific.com)
-   - Without API key: Uses standard non-ToU tariff
-   - With API key: Automatically enables ToU with peak/off-peak splitting
+  - Get a free API key from [Calendarific.com](https://calendarific.com)
+  - Without API key: Uses standard non-ToU tariff
+  - With API key: Automatically enables ToU with peak/off-peak splitting
 4. Finish setup
 
 ## Requirements
@@ -405,7 +405,7 @@ After setup, these sensors will be created:
 ### Monthly Calculation & Custom Billing Cycles
 - **Custom Billing Start Day**: Set your TNB billing cycle start date (1-31) via the Billing Start Day number entity
   - Changes take effect at the next billing cycle boundary
-  - Pending changes shown in `sensor.tnb_calculator_billing_start_day_status` (e.g., `"1 (→ 4 next cycle)"`)
+  - Pending changes shown in `sensor.tnb_calculator_billing_start_day_status` (e.g., `"1 (-> 4 next cycle)"`)
   - Attributes expose `billing_start_day_active`, `billing_start_day_configured`, and `billing_start_day_pending`
 - Calculations reset automatically based on your configured billing start day
 - Peak/off-peak splitting is handled automatically by the integration based on time and holidays
@@ -419,8 +419,8 @@ After setup, these sensors will be created:
 - NEM credits are capped at import base charges (KWTBB/Service Tax are never offset), so total cost never goes negative
 
 ### Smart Predictions
-- **Cost Trend Method**: Direct cost averaging - `(current_cost / days_elapsed) × days_in_month`
-  - Example: MYR 3.00 over 4 days = MYR 0.75/day × 30 = MYR 22.50 ± 5%
+- **Cost Trend Method**: Direct cost averaging - `(current_cost / days_elapsed) days_in_month`
+  - Example: MYR 3.00 over 4 days = MYR 0.75/day 30 = MYR 22.50 5%
   - More accurate than kWh projection, especially early in the month
 - **Hybrid Method**: Weighted combination of cost trend + historical average (when 2+ months of data available)
   - Early month (days 1-7): 30% trend, 70% history
@@ -463,7 +463,7 @@ entities:
   - [ApexCharts Card](https://github.com/RomRider/apexcharts-card)
 
 ### Use as a dedicated dashboard
-1. Make sure both custom cards are installed and added under *Settings → Dashboards → Resources*.
+1. Make sure both custom cards are installed and added under *Settings -> Dashboards Resources*.
 2. Copy `dashboards/tnb_calculator_dashboard.yaml` into your `config/www/` (or include it via your dashboard YAML).
 3. In Home Assistant, create a new dashboard and paste the contents of the file. It renders monthly summaries, daily usage, diagnostics, and service buttons.
 

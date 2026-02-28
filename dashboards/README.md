@@ -17,7 +17,7 @@ A simple, functional dashboard using standard Home Assistant entities and ApexCh
 
 ---
 
-### 2. `tnb_calculator_bubble_modern.yaml` (Modern/Recommended ⭐)
+### 2. `tnb_calculator_bubble_modern.yaml` (Modern, recommended)
 An Apple-inspired dashboard with soft colors, clean typography, and intuitive organization.
 
 **Requirements:**
@@ -41,20 +41,20 @@ An Apple-inspired dashboard with soft colors, clean typography, and intuitive or
 
 **Installation:**
 1. Install Bubble Card via HACS:
-   - Go to HACS → Frontend
-   - Search for "Bubble Card"
-   - Install and restart Home Assistant
+ - Go to HACS -> Frontend
+ - Search for "Bubble Card"
+ - Install and restart Home Assistant
 
 2. Install ApexCharts Card via HACS:
-   - Go to HACS → Frontend
-   - Search for "ApexCharts Card"
-   - Install and restart Home Assistant
+ - Go to HACS -> Frontend
+ - Search for "ApexCharts Card"
+ - Install and restart Home Assistant
 
 3. Copy the dashboard YAML:
-   - Navigate to Settings → Dashboards
-   - Create a new dashboard or edit existing
-   - Switch to YAML mode
-   - Paste the contents of `tnb_calculator_bubble_modern.yaml`
+ - Navigate to Settings -> Dashboards
+ - Create a new dashboard or edit existing
+ - Switch to YAML mode
+ - Paste the contents of `tnb_calculator_bubble_modern.yaml`
 
 **Sections:**
 - **Overview**: Monthly Bill, Forecast, Usage Tier
