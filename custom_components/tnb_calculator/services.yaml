@@ -238,13 +238,13 @@ set_afa_rate:
         AFA (Automatic Fuel Adjustment) rate in MYR per kWh.
         Applied when monthly usage exceeds 600 kWh.
         
-        Enter a positive value (e.g., 0.0891 for Nov 2025).
-        The integration handles sign internally.
+        Enter the rate value (e.g., -0.0499 for rebate, 0.0891 for surcharge).
+        Negative values mean a rebate/discount.
       required: true
-      example: "0.0891"
+      example: "-0.0499"
       selector:
         number:
-          min: 0
+          min: -1
           max: 1
           step: "any"
           mode: box
@@ -260,7 +260,7 @@ reset_tariff_rates:
     **Default values after reset:**
     
     📊 **AFA (Automatic Fuel Adjustment)**
-    - AFA Rate: 0.0145 MYR/kWh
+    - AFA Rate: -0.0499 MYR/kWh
     - AFA Threshold: 600 kWh
     
     ⚡ **Generation Rates (ToU)**
@@ -370,3 +370,72 @@ fetch_all_rates:
       example: "http://192.168.1.100:8001/complete"
       selector:
         text:
+
+calibrate_nem_balance:
+  name: Calibrate NEM Credit Balance
+  description: |
+    Set the persistent NEM (Net Energy Metering) credit balance in kWh.
+    
+    This is the rolling excess solar credit that TNB tracks across billing months.
+    When your solar export exceeds your import charges, the excess kWh are banked
+    and carried forward. Use this service to sync the balance with your actual TNB bill.
+    
+    Set to 0 to clear the balance.
+  fields:
+    nem_balance_kwh:
+      name: NEM Balance (kWh)
+      description: The NEM credit balance in kWh from your TNB bill
+      required: true
+      example: 150.0
+      selector:
+        number:
+          min: 0
+          max: 100000
+          step: 0.01
+          mode: box
+          unit_of_measurement: "kWh"
+
+calibrate_monthly_cost:
+  name: Calibrate Monthly Cost
+  description: |
+    Set the actual bill cost for the current or a specific historical month.
+    
+    Use this to record your actual TNB bill amount so you can compare
+    calculated vs actual costs over time. If month/year are provided,
+    it updates that specific historical month. Otherwise, it updates
+    the current billing period.
+  fields:
+    actual_cost:
+      name: Actual Cost (MYR)
+      description: The actual bill amount from your TNB bill
+      required: true
+      example: 156.50
+      selector:
+        number:
+          min: 0
+          max: 100000
+          step: 0.01
+          mode: box
+          unit_of_measurement: "MYR"
+    month:
+      name: Month (optional)
+      description: Month to calibrate (1-12). Leave empty for current month.
+      required: false
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 12
+          step: 1
+          mode: box
+    year:
+      name: Year (optional)
+      description: Year to calibrate. Leave empty for current year.
+      required: false
+      example: 2026
+      selector:
+        number:
+          min: 2020
+          max: 2030
+          step: 1
+          mode: box

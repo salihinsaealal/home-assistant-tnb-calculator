@@ -67,9 +67,9 @@ curl http://localhost:8001/afa/simple
 Once the scraper is running, use it with TNB Calculator:
 
 ```yaml
-service: tnb_calculator.fetch_tariff_rates
+service: tnb_calculator.fetch_afa_rate
 data:
-  api_url: "http://<your-server-ip>:8000/afa/simple"
+  api_url: "http://<your-server-ip>:8001/afa/simple"
 ```
 
 ### Monthly Automation
@@ -84,9 +84,9 @@ automation:
       - condition: template
         value_template: "{{ now().day == 1 }}"
     action:
-      - service: tnb_calculator.fetch_tariff_rates
+      - service: tnb_calculator.fetch_afa_rate
         data:
-          api_url: "http://<your-server-ip>:8000/afa/simple"
+          api_url: "http://<your-server-ip>:8001/afa/simple"
 ```
 
 ## How It Works

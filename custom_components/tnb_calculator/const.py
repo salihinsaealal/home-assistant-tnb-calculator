@@ -21,10 +21,10 @@ CONF_CALENDARIFIC_API_KEY = "calendarific_api_key"
 CONF_COUNTRY = "country"
 CONF_YEAR = "year"
 CONF_BILLING_START_DAY = "billing_start_day"
-CONF_VERSION = "4.4.4"
+CONF_VERSION = "4.4.5"
 
 # Tariff defaults (can be overridden via service)
-DEFAULT_AFA_RATE = 0.0145          # MYR/kWh for usage >= 600 kWh
+DEFAULT_AFA_RATE = -0.0499             # MYR/kWh for usage >= 600 kWh (rebate as of 01/01/2026)
 DEFAULT_AFA_THRESHOLD = 600        # kWh threshold for AFA
 DEFAULT_RETAILING_CHARGE = 10.0    # MYR fixed charge for usage > 600 kWh
 
@@ -84,6 +84,22 @@ BASE_SENSOR_TYPES = {
         "device_class": "energy",
         "state_class": "total_increasing",
         "entity_category": None,  # Main entity
+    },
+    "nem_excess_kwh": {
+        "name": "NEM Excess Credit",
+        "unit": "kWh",
+        "device_class": "energy",
+        "state_class": "measurement",
+        "entity_category": None,  # Main entity
+        "icon": "mdi:solar-power-variant",
+    },
+    "monthly_bill": {
+        "name": "Monthly Bill",
+        "unit": "MYR",
+        "device_class": "monetary",
+        "state_class": "total",
+        "entity_category": None,  # Main entity
+        "icon": "mdi:receipt-text",
     },
     # Status sensors for monitoring
     "day_status": {

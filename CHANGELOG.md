@@ -2,6 +2,21 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [4.4.5] - 2026-02-28
+
+### Fixed
+- NEM export credits are capped at import base charges (prevents negative bills; matches TNB billing behavior)
+- Holiday cache no longer grows across years; stale year entries are pruned on load
+
+### Added
+- `sensor.tnb_calculator_nem_excess_kwh`: NEM excess credit carried forward (kWh)
+- Persistent NEM credit balance across billing months + `tnb_calculator.calibrate_nem_balance` service
+- `sensor.tnb_calculator_monthly_bill`: current month bill with last-12-month history in attributes
+- `tnb_calculator.calibrate_monthly_cost` service to store actual bill cost for current or historical months
+
+### Changed
+- AFA manual override now accepts negative values (rebates)
+
 ## [4.4.4] - 2025-12-18
 
 ### Fixed

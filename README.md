@@ -18,7 +18,19 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## ⭐ What's New in v4.4.4
+## ⭐ What's New in v4.4.5
+
+### ☀️ Solar / NEM Billing Accuracy Fixes
+
+- **No more negative bills**: NEM export credits are capped at import base charges (matches TNB billing).
+- **New sensor**: `sensor.tnb_calculator_nem_excess_kwh` tracks excess NEM credit (kWh) carried forward.
+- **Persistent NEM balance**: Excess credit rolls across months (like TNB) and can be calibrated via service.
+
+### 🧾 Monthly Bill History + Calibration
+
+- **New sensor**: `sensor.tnb_calculator_monthly_bill` (state=current month cost).
+- **History in attributes**: last 12 months available via `monthly_history` attribute.
+- **New service**: `tnb_calculator.calibrate_monthly_cost` stores actual bill for current or historical months.
 
 ### ⚡ Accurate Daily Peak/Off-Peak Tracking
 
@@ -154,7 +166,7 @@ The AFA optimization sensors now use a **practical, rate-based approach** to hel
 ### 🔄 Refined AFA Services
 
 - `set_tariff_rates` / `fetch_tariff_rates` have been split and clarified into:
-  - `set_afa_rate`: manual AFA override (positive `MYR/kWh`).
+  - `set_afa_rate`: manual AFA override (can be negative for rebates).
   - `fetch_afa_rate`: fetch AFA only from `/afa/simple`.
   - `fetch_all_rates`: fetch full tariff table from `/complete`.
 - Reset service updated to `reset_tariff_rates` to reset **all** tariffs (not just AFA).
@@ -172,7 +184,7 @@ The AFA optimization sensors now use a **practical, rate-based approach** to hel
 - **Diagnostic Sensors**: Sensors expose the current AFA rate, source, and last updated time for easier monitoring.
 - **External Scraper Support**: Optional `tnb-afa-scraper` (FastAPI + Playwright) service to automatically scrape TNB's AFA table and return a ready-to-use `afa_rate`.
 - **Automation Blueprint**: Bundle includes an automation blueprint to call the AFA fetch service monthly using the scraper URL.
-- **Positive AFA Rate Handling**: Scraper normalizes TNB's negative rebate values to a positive `afa_rate` so existing cost calculations remain correct.
+- **AFA Sign Handling**: Scraper returns the AFA rate with the original sign (negative = rebate, positive = surcharge), and the integration applies it directly.
 
 ## ⭐ What's New in v4.0.0
 
@@ -216,6 +228,28 @@ data:
 ```
 - The integration logs the comparison and posts a notification showing the calculated cost, actual bill, absolute difference, and percentage variance.
 - If the difference exceeds ±5%, the notification highlights it so you can investigate.
+
+### NEM & Bill Calibration
+
+#### Calibrate NEM Balance
+Set the rolling NEM credit balance (kWh) from your TNB bill (carried across months):
+
+```yaml
+service: tnb_calculator.calibrate_nem_balance
+data:
+  nem_balance_kwh: 150.0
+```
+
+#### Calibrate Monthly Cost
+Store the actual bill amount for the current month (or a specific historical month):
+
+```yaml
+service: tnb_calculator.calibrate_monthly_cost
+data:
+  actual_cost: 156.50
+  month: 1    # Optional
+  year: 2026  # Optional
+```
 
 ### Energy Calibration Services
 
@@ -322,6 +356,8 @@ After setup, these sensors will be created:
 - **Import Energy**: Monthly electricity imported in kWh
 - **Export Energy**: Monthly electricity exported in kWh
 - **Net Energy**: Net consumption (Import - Export) in kWh
+- **NEM Excess Credit**: Excess NEM credit carried forward (kWh)
+- **Monthly Bill**: Current billing period cost with last-12-month history in attributes
 - **Predicted Monthly Cost**: Smart forecast of end-of-month bill
 - **Predicted Monthly Import**: Projected total kWh consumption
 
@@ -380,6 +416,7 @@ After setup, these sensors will be created:
 - Handles tiered pricing (first 600 kWh vs excess)
 - Calculates export credits for solar users
 - ToU mode automatically splits import energy and applies appropriate rates and NEM rebates
+- NEM credits are capped at import base charges (KWTBB/Service Tax are never offset), so total cost never goes negative
 
 ### Smart Predictions
 - **Cost Trend Method**: Direct cost averaging - `(current_cost / days_elapsed) × days_in_month`
@@ -546,6 +583,7 @@ This integration is open source. Feel free to modify and share.
 
 ## Version History
 
+- v4.4.5: NEM credits capped (no negative bills), NEM excess carry-forward, monthly bill history + calibration services
 - v4.4.4: Accurate daily peak/off-peak tracking (delta-based, boundary-aware splitting)
 - v4.4.3: Separate ToU/non-ToU recommendation entities, Option B gating, stay_put zone, normalized attribute keys
 - v4.4.2: Smarter AFA optimization with marginal rate analysis (practical targets, rate-based labels)

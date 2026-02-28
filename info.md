@@ -64,7 +64,7 @@ Example response:
 }
 ```
 
-Use the `afa_rate` field (positive RM/kWh) with the `tnb_calculator.fetch_tariff_rates` service.
+Use the `afa_rate` field (can be negative for rebates) with the `tnb_calculator.fetch_afa_rate` service.
 
 ### Automation blueprint
 
@@ -81,7 +81,7 @@ Use the `afa_rate` field (positive RM/kWh) with the `tnb_calculator.fetch_tariff
    - **Time of day**: e.g. `00:10:00`
    - **Day of month**: e.g. `1`
 
-The automation will call `tnb_calculator.fetch_tariff_rates` monthly with the scraper URL and update the AFA rate automatically.
+The automation will call `tnb_calculator.fetch_afa_rate` monthly with the scraper URL and update the AFA rate automatically.
 
 ## Configuration
 

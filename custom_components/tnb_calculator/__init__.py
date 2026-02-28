@@ -66,7 +66,7 @@ SERVICE_ADJUST_EXPORT_ENERGY_VALUES_SCHEMA = vol.Schema({
 SERVICE_SET_AFA_RATE_SCHEMA = vol.Schema({
     vol.Required("afa_rate"): vol.All(
         vol.Coerce(float), 
-        vol.Range(min=0, max=1)
+        vol.Range(min=-1, max=1)
     ),
 })
 
@@ -80,6 +80,22 @@ SERVICE_FETCH_AFA_RATE_SCHEMA = vol.Schema({
 
 SERVICE_FETCH_ALL_RATES_SCHEMA = vol.Schema({
     vol.Optional("api_url"): cv.url,
+})
+
+SERVICE_CALIBRATE_NEM_BALANCE_SCHEMA = vol.Schema({
+    vol.Required("nem_balance_kwh"): vol.All(
+        vol.Coerce(float),
+        vol.Range(min=0),
+    ),
+})
+
+SERVICE_CALIBRATE_MONTHLY_COST_SCHEMA = vol.Schema({
+    vol.Required("actual_cost"): vol.All(
+        vol.Coerce(float),
+        vol.Range(min=0),
+    ),
+    vol.Optional("month"): vol.All(vol.Coerce(int), vol.Range(min=1, max=12)),
+    vol.Optional("year"): vol.All(vol.Coerce(int), vol.Range(min=2020, max=2030)),
 })
 
 
@@ -135,6 +151,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             calculated_cost = coordinator.data.get("total_cost_tou", 0.0)
             if calculated_cost == 0.0:
                 calculated_cost = coordinator.data.get("total_cost_non_tou", 0.0)
+            
+            # Store actual bill amount for historical tracking
+            if month is not None and year is not None:
+                month_key = f"{year}-{month:02d}"
+                if month_key in coordinator._historical_months:
+                    coordinator._historical_months[month_key]["actual_cost"] = actual_bill
+            else:
+                # Store on current monthly data
+                if hasattr(coordinator, "_monthly_data"):
+                    coordinator._monthly_data["actual_cost"] = actual_bill
+            await coordinator._save_monthly_data()
             
             # Calculate difference
             difference = calculated_cost - actual_bill
@@ -350,6 +377,64 @@ Monthly Export: {coordinator.data.get('export_energy', 0):.2f} kWh
             "fetch_all_rates",
             handle_fetch_all_rates,
             schema=SERVICE_FETCH_ALL_RATES_SCHEMA,
+        )
+        
+        async def handle_calibrate_nem_balance(call: ServiceCall) -> None:
+            """Handle setting the persistent NEM credit balance."""
+            coordinator_data = hass.data[DOMAIN].get(entry.entry_id)
+            if not coordinator_data or "coordinator" not in coordinator_data:
+                _LOGGER.error("Could not find TNB Calculator coordinator for calibrate_nem_balance")
+                return
+            
+            coordinator: TNBDataCoordinator = coordinator_data["coordinator"]
+            nem_balance = call.data["nem_balance_kwh"]
+            coordinator._nem_credit_balance_kwh = nem_balance
+            await coordinator._save_monthly_data()
+            await coordinator.async_refresh()
+            _LOGGER.info("NEM credit balance calibrated to %.4f kWh", nem_balance)
+        
+        hass.services.async_register(
+            DOMAIN,
+            "calibrate_nem_balance",
+            handle_calibrate_nem_balance,
+            schema=SERVICE_CALIBRATE_NEM_BALANCE_SCHEMA,
+        )
+        
+        async def handle_calibrate_monthly_cost(call: ServiceCall) -> None:
+            """Handle setting the actual cost for current or historical month."""
+            coordinator_data = hass.data[DOMAIN].get(entry.entry_id)
+            if not coordinator_data or "coordinator" not in coordinator_data:
+                _LOGGER.error("Could not find TNB Calculator coordinator for calibrate_monthly_cost")
+                return
+            
+            coordinator: TNBDataCoordinator = coordinator_data["coordinator"]
+            actual_cost = call.data["actual_cost"]
+            month = call.data.get("month")
+            year = call.data.get("year")
+            
+            if month is not None and year is not None:
+                # Update a specific historical month
+                month_key = f"{year}-{month:02d}"
+                if month_key in coordinator._historical_months:
+                    coordinator._historical_months[month_key]["actual_cost"] = actual_cost
+                    _LOGGER.info("Calibrated historical month %s actual cost to MYR %.2f", month_key, actual_cost)
+                else:
+                    _LOGGER.warning("Historical month %s not found, cannot calibrate", month_key)
+                    raise HomeAssistantError(f"No historical data for {month_key}. Available months: {list(coordinator._historical_months.keys())}")
+            else:
+                # Update current month — store as override on monthly_data
+                if hasattr(coordinator, "_monthly_data"):
+                    coordinator._monthly_data["actual_cost"] = actual_cost
+                    _LOGGER.info("Calibrated current month actual cost to MYR %.2f", actual_cost)
+            
+            await coordinator._save_monthly_data()
+            await coordinator.async_refresh()
+        
+        hass.services.async_register(
+            DOMAIN,
+            "calibrate_monthly_cost",
+            handle_calibrate_monthly_cost,
+            schema=SERVICE_CALIBRATE_MONTHLY_COST_SCHEMA,
         )
         
         # Register webhook for tariff updates

@@ -101,7 +101,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="4.4.4",
+        sw_version="4.4.5",
     )
 
     sensors = [
@@ -193,6 +193,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         self._last_successful_update = None
         self._validation_errors: list[str] = []
         self._last_validation_status: str = "OK"
+        self._nem_credit_balance_kwh: float = 0.0  # Persistent NEM excess rolling balance
         
         # Tariff overrides (loaded from storage, can be set via service)
         self._tariff_overrides: Dict[str, Any] = {
@@ -274,7 +275,16 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             
             # Load holiday cache from storage
             if not self._holiday_data_loaded:
-                self._holiday_cache = stored_data.get("holiday_cache", {})
+                raw_cache = stored_data.get("holiday_cache", {})
+                # Prune stale years on load — only keep current year entries
+                current_year_prefix = f"{dt_util.now().year}-"
+                self._holiday_cache = {
+                    k: v for k, v in raw_cache.items()
+                    if k.startswith(current_year_prefix)
+                }
+                pruned = len(raw_cache) - len(self._holiday_cache)
+                if pruned > 0:
+                    _LOGGER.info("Pruned %d stale holiday entries from previous years", pruned)
                 self._last_holiday_fetch = stored_data.get("last_holiday_fetch")
                 self._holiday_data_loaded = True
                 _LOGGER.debug("Loaded %d holidays from storage, last fetch: %s", 
@@ -282,6 +292,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             
             # Load historical data
             self._historical_months = stored_data.get("historical_months", {})
+            
+            # Load persistent NEM credit balance
+            self._nem_credit_balance_kwh = stored_data.get("nem_credit_balance_kwh", 0.0)
             
             # Migration: Add billing_start_day to historical months
             migrated_count = 0
@@ -342,6 +355,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 "daily_data": getattr(self, "_daily_data", {}),
                 "tariff_overrides": getattr(self, "_tariff_overrides", {}),
                 AUTO_FETCH_ENABLED_KEY: getattr(self, "_auto_fetch_enabled", False),
+                "nem_credit_balance_kwh": getattr(self, "_nem_credit_balance_kwh", 0.0),
             }
             await self._store.async_save(storage_data)
             _LOGGER.debug("Saved data to storage: monthly + daily + %d holidays + %d historical months", 
@@ -367,6 +381,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         self._last_calculated_cost = 0.0
         self._validation_errors = []
         self._last_validation_status = "OK"
+        self._nem_credit_balance_kwh = 0.0
 
         await self._save_monthly_data()
         self.async_set_updated_data({})
@@ -582,6 +597,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             non_tou_costs = self._calculate_non_tou_costs(monthly_import, monthly_export)
             result["total_cost_non_tou"] = non_tou_costs["total_cost"]
             
+            # Track NEM excess from both calculation paths
+            nem_excess_kwh_current = 0.0
+            
             # Calculate ToU costs if enabled
             if self._tou_enabled:
                 result["import_peak_energy"] = self._round_energy(monthly_peak)
@@ -592,17 +610,26 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                     monthly_export,
                 )
                 result["total_cost_tou"] = tou_costs["total_cost"]
+                nem_excess_kwh_current = tou_costs.get("nem_excess_kwh", 0.0)
                 # Add detailed ToU breakdown
                 result.update(tou_costs)
             else:
                 # ToU not enabled - set to None (shows as "unavailable")
                 result["total_cost_tou"] = None
+                nem_excess_kwh_current = non_tou_costs.get("nem_excess_kwh", 0.0)
                 # Add non-ToU breakdown for peak/off-peak cost sensors
                 result["peak_cost"] = non_tou_costs.get("peak_cost", 0.0)
                 result["off_peak_cost"] = non_tou_costs.get("off_peak_cost", 0.0)
 
+            # NEM excess: current month excess + persistent balance from prior months
+            persistent_nem_balance = getattr(self, "_nem_credit_balance_kwh", 0.0)
+            result["nem_excess_kwh"] = round(nem_excess_kwh_current + persistent_nem_balance, 4)
+
             # Store last calculated cost for historical tracking
             self._last_calculated_cost = result.get("total_cost_tou" if self._tou_enabled else "total_cost_non_tou", 0.0)
+            
+            # Monthly bill sensor: state = current month cost, attributes = historical months
+            result["monthly_bill"] = self._last_calculated_cost
             
             # Calculate predictions
             prediction_data = self._calculate_predictions(now, monthly_import, monthly_peak, monthly_offpeak, monthly_export)
@@ -1014,11 +1041,11 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         For API updates, use async_fetch_afa_rate or async_fetch_all_rates.
         
         Args:
-            afa_rate: AFA rate in MYR/kWh (e.g., 0.0891). Must be positive.
+            afa_rate: AFA rate in MYR/kWh (e.g., -0.0499 for rebate, 0.0891 for surcharge). Must be between -1 and 1.
         """
         if afa_rate is not None:
-            if afa_rate < 0 or afa_rate > 1:
-                _LOGGER.warning("Invalid AFA rate: %s (must be 0-1)", afa_rate)
+            if afa_rate < -1 or afa_rate > 1:
+                _LOGGER.warning("Invalid AFA rate: %s (must be -1 to 1)", afa_rate)
                 return
             
             self._tariff_overrides["afa_rate"] = afa_rate
@@ -1038,7 +1065,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         """Reset ALL tariff rates to hardcoded defaults.
         
         Clears all overrides (AFA, tariffs, etc.) and reverts to:
-        - AFA: 0.0145 MYR/kWh (DEFAULT_AFA_RATE)
+        - AFA: -0.0499 MYR/kWh (DEFAULT_AFA_RATE)
         - ToU rates: 0.2852/0.2443/0.3852/0.3443
         - Non-ToU: 0.2703
         - Capacity: 0.0455
@@ -1099,8 +1126,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                     return False
                 
                 # Validate range
-                if not (0 <= afa_rate <= 1):
-                    _LOGGER.error("Invalid AFA rate from API: %s (must be 0-1)", afa_rate)
+                if not (-1 <= afa_rate <= 1):
+                    _LOGGER.error("Invalid AFA rate from API: %s (must be -1 to 1)", afa_rate)
                     return False
                 
                 # Update tariff overrides
@@ -1192,8 +1219,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                     _LOGGER.error("Complete API response missing 'current_rate.afa_rate'")
                     return False
                 
-                if not (0 <= afa_rate <= 1):
-                    _LOGGER.error("Invalid AFA rate from API: %s (must be 0-1)", afa_rate)
+                if not (-1 <= afa_rate <= 1):
+                    _LOGGER.error("Invalid AFA rate from API: %s (must be -1 to 1)", afa_rate)
                     return False
                 
                 # Extract tariffs
@@ -1329,7 +1356,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         
         Expected webhook payload format:
         {
-            "afa_rate": 0.0145,
+            "afa_rate": -0.0499,
             "effective_date": "2025-01-01"  // optional
         }
         
@@ -1352,8 +1379,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             _LOGGER.error("Invalid AFA rate from webhook: %s (not a number)", afa_rate)
             return False
         
-        if not (0 <= afa_rate <= 1):
-            _LOGGER.error("Invalid AFA rate from webhook: %s (must be 0-1)", afa_rate)
+        if not (-1 <= afa_rate <= 1):
+            _LOGGER.error("Invalid AFA rate from webhook: %s (must be -1 to 1)", afa_rate)
             return False
         
         # Update tariff overrides
@@ -1463,14 +1490,36 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         )
         
         if month_changed and hasattr(self, "_monthly_data"):
+            # Calculate current month's NEM excess before archiving
+            monthly_import = self._monthly_data.get("import_total", 0)
+            monthly_export = self._monthly_data.get("export_total", 0)
+            monthly_peak = self._monthly_data.get("import_peak", 0)
+            monthly_offpeak = self._monthly_data.get("import_offpeak", 0)
+            
+            current_month_nem_excess = 0.0
+            if self._tou_enabled:
+                tou_result = self._calculate_tou_costs(monthly_peak, monthly_offpeak, monthly_export)
+                current_month_nem_excess = tou_result.get("nem_excess_kwh", 0.0)
+            else:
+                non_tou_result = self._calculate_non_tou_costs(monthly_import, monthly_export)
+                current_month_nem_excess = non_tou_result.get("nem_excess_kwh", 0.0)
+            
+            # Roll current month's excess into persistent NEM balance
+            if current_month_nem_excess > 0:
+                self._nem_credit_balance_kwh += current_month_nem_excess
+                _LOGGER.info("NEM excess of %.4f kWh added to persistent balance (new total: %.4f kWh)",
+                            current_month_nem_excess, self._nem_credit_balance_kwh)
+            
             # Save completed month to historical data before reset
             month_key = f"{self._monthly_data['year']}-{self._monthly_data['month']:02d}"
             self._historical_months[month_key] = {
-                "total_kwh": self._monthly_data.get("import_total", 0),
+                "total_kwh": monthly_import,
                 "total_cost": self._last_calculated_cost,
-                "peak_kwh": self._monthly_data.get("import_peak", 0),
-                "offpeak_kwh": self._monthly_data.get("import_offpeak", 0),
-                "export_kwh": self._monthly_data.get("export_total", 0),
+                "peak_kwh": monthly_peak,
+                "offpeak_kwh": monthly_offpeak,
+                "export_kwh": monthly_export,
+                "nem_excess_kwh": current_month_nem_excess,
+                "actual_cost": self._monthly_data.get("actual_cost"),
             }
             
             # Keep only last 12 months
@@ -1937,12 +1986,11 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                     data = await response.json()
                     holidays = data.get("response", {}).get("holidays", [])
                     
-                    # Clear old cache for this year and rebuild
+                    # Clear ALL cached holidays and rebuild for current year only
+                    # Previous fix only removed current year entries, leaving stale years
+                    # which inflated cached_holidays_count indefinitely
                     year_prefix = f"{timestamp.year}-"
-                    self._holiday_cache = {
-                        k: v for k, v in self._holiday_cache.items() 
-                        if not k.startswith(year_prefix)
-                    }
+                    self._holiday_cache = {}
                     
                     # Cache all holidays for the year
                     for holiday in holidays:
@@ -2050,8 +2098,18 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         # Insentif Leveling
         e28_insentif = -export_total * ict_rate
         
-        # Final total
-        e30_final = e18_import_charge + e19_st + e20_kw + nem_rebate_sum + e28_insentif
+        # Cap total NEM credits at E18 (import base charge) — TNB never lets NEM exceed E18
+        # KWTBB and Service Tax are always payable and never offset by NEM.
+        nem_total_uncapped = nem_rebate_sum + e28_insentif  # negative value
+        nem_applied = max(nem_total_uncapped, -e18_import_charge)  # cap: can't exceed E18
+        nem_excess_rm = nem_total_uncapped - nem_applied  # negative = excess credit in RM
+        
+        # Convert excess RM to kWh using the average export credit rate
+        avg_export_rate_per_kwh = abs(nem_total_uncapped / export_total) if export_total > 0 else 0.0
+        nem_excess_kwh = abs(nem_excess_rm) / avg_export_rate_per_kwh if avg_export_rate_per_kwh > 0 else 0.0
+        
+        # Final total — NEM capped at E18, taxes always apply
+        e30_final = max(e18_import_charge + e19_st + e20_kw + nem_applied, 0.0)
         
         return {
             "total_cost": self._round_currency(e30_final),
@@ -2071,6 +2129,9 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             "rebate_nem_capacity": self._round_currency(e25_nem_cap),
             "rebate_nem_network": self._round_currency(e26_nem_netw),
             "rebate_insentif": self._round_currency(e28_insentif),
+            "nem_excess_kwh": round(nem_excess_kwh, 4),
+            "nem_applied": self._round_currency(nem_applied),
+            "nem_total_uncapped": self._round_currency(nem_total_uncapped),
             "rate_generation_peak": gen_peak_eff,
             "rate_generation_offpeak": gen_off_eff,
             "rate_capacity": cap_rate,
@@ -2128,23 +2189,35 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         total_import_kwtbb = (import_kwtbb_tier1 + import_kwtbb_tier2) if import_kwh > 300 else 0
         total_import_service_tax = import_service_tax
         
-        total_import = total_import_caj + total_import_capacity + total_import_network + total_import_runcit + total_import_ict + total_import_kwtbb + total_import_service_tax
+        # Separate import base (offset-able by NEM) from taxes (always payable)
+        import_base = total_import_caj + total_import_capacity + total_import_network + total_import_runcit + total_import_ict
+        import_taxes = total_import_kwtbb + total_import_service_tax
         
-        # Export calculation (credits)
+        # Export calculation (credits) — negative values
         export_caj = export_kwh * -gen_rate
         export_capacity = export_kwh * -cap_rate
         export_network = export_kwh * -netw_rate
         export_ict = export_kwh * -ict_rate
         
-        total_export = export_caj + export_capacity + export_network + export_ict
+        total_export_uncapped = export_caj + export_capacity + export_network + export_ict  # negative
         
-        # Final subtotal
-        subtotal = total_import + total_export
+        # Cap NEM credits at import_base — TNB never lets NEM exceed the base charges
+        # KWTBB and Service Tax are always payable and never offset by NEM.
+        total_export_applied = max(total_export_uncapped, -import_base)
+        nem_excess_rm = total_export_uncapped - total_export_applied  # negative = excess
+        
+        # Convert excess RM to kWh using average export credit rate
+        avg_export_rate_per_kwh = abs(total_export_uncapped / export_kwh) if export_kwh > 0 else 0.0
+        nem_excess_kwh = abs(nem_excess_rm) / avg_export_rate_per_kwh if avg_export_rate_per_kwh > 0 else 0.0
+        
+        # Final subtotal — NEM capped at import_base, taxes always apply
+        subtotal = max(import_base + import_taxes + total_export_applied, 0.0)
         
         return {
             "total_cost": self._round_currency(subtotal),
             "peak_cost": self._round_currency(0.0),
             "off_peak_cost": self._round_currency(total_import_caj),
+            "nem_excess_kwh": round(nem_excess_kwh, 4),
             "rate_import": gen_rate,
             "rate_capacity": cap_rate,
             "rate_network": netw_rate,
@@ -2987,7 +3060,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "4.4.4",
+            "sw_version": "4.4.5",
         }
 
     @property
@@ -3028,6 +3101,14 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
         if self._sensor_type == "configuration_scenario":
             scenario_details = self.coordinator.data.get("configuration_scenario_details", {})
             attrs.update(scenario_details)
+            return attrs
+        
+        # Add monthly billing history as attributes on monthly_bill sensor
+        if self._sensor_type == "monthly_bill":
+            attrs["monthly_history"] = getattr(self.coordinator, "_historical_months", {})
+            attrs["nem_credit_balance_kwh"] = getattr(self.coordinator, "_nem_credit_balance_kwh", 0.0)
+            attrs["current_month"] = self.coordinator.data.get("current_month")
+            attrs["billing_start_day"] = self.coordinator.data.get("billing_start_day_active")
             return attrs
         
         # Add holiday cache info only to diagnostic sensors
