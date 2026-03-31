@@ -2972,6 +2972,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         return {
             # Main sensor values
             "ideal_import_kwh": self._round_energy(current_import),
+            "ideal_import_kwh_tou": self._round_energy(current_import),
+            "ideal_import_kwh_non_tou": self._round_energy(current_import),
             "savings_if_ideal_kwh": 0.0,
             "afa_optimization_savings": 0.0,
             "afa_weird_zone": False,
