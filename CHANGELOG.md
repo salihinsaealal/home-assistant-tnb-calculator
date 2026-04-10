@@ -2,6 +2,11 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [4.4.7] - 2026-04-10
+
+### Fixed
+- Added missing `ideal_import_kwh_tou` and `ideal_import_kwh_non_tou` values to the early-return fallback path in the optimization calculation, preventing these sensors from showing as unavailable when the fallback is triggered (PR #4, contributor @zubir2k)
+
 ## [4.4.6] - 2026-02-28
 
 ### Fixed
