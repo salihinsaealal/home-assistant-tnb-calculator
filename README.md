@@ -18,7 +18,32 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## What's New in v4.4.5
+## What's New in v4.4.8
+
+### Baseline protection during router/integration reconnects
+
+Fixed a critical issue where sensor baselines could be corrupted during network interruptions:
+
+- **Problem:** Router reset or integration reload → sensors temporarily unavailable → baseline set to 0 → spike detection errors
+- **Solution:** Integration now preserves last known sensor baseline when sensors return 0 but previous baseline was valid
+- **Impact:** Prevents data loss after router resets, HA restarts, integration reloads, and network issues
+- **User action:** If currently experiencing spike detection errors, run `reset_storage` service after upgrade
+
+See `ROUTER_RESET_FIX.md` for detailed explanation and prevention strategies.
+
+<details>
+ <summary><strong>v4.4.7 release notes</strong></summary>
+
+### AFA optimization sensor fix
+
+- Fixed `ideal_import_kwh_tou` and `ideal_import_kwh_non_tou` sensors showing as unavailable when the optimization calculation takes the early-return fallback path.
+- Both ToU and non-ToU ideal import values are now always returned, keeping all optimization entities available regardless of the code path taken.
+- Community contribution from @zubir2k (PR #4).
+
+</details>
+
+<details>
+ <summary><strong>v4.4.5 release notes</strong></summary>
 
 ### Solar / NEM billing accuracy
 
@@ -53,6 +78,8 @@ The daily ToU sensors now show **actual usage timing**, not estimates:
 - Daily sensors now accumulate from deltas (like monthly), not from ratio estimates
 - `_split_delta_by_period()` helper ensures accurate time-based allocation
 - Monthly calculations remain unchanged
+
+</details>
 
 <details>
  <summary><strong>v4.4.3 release notes</strong></summary>
@@ -583,6 +610,9 @@ This integration is open source. Feel free to modify and share.
 
 ## Version History
 
+- v4.4.8: Fix baseline corruption during router/integration reconnects; preserve last known baseline when sensors unavailable
+- v4.4.7: Fix ideal_import_kwh_tou/non_tou unavailable on fallback path (PR #4, @zubir2k)
+- v4.4.6: KWTBB/Service Tax correctly outside NEM floor; today cost fix for solar/NEM users
 - v4.4.5: NEM credits capped (no negative bills), NEM excess carry-forward, monthly bill history + calibration services
 - v4.4.4: Accurate daily peak/off-peak tracking (delta-based, boundary-aware splitting)
 - v4.4.3: Separate ToU/non-ToU recommendation entities, Option B gating, stay_put zone, normalized attribute keys

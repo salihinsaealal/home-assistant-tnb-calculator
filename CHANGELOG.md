@@ -2,6 +2,21 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [4.4.8] - 2026-05-17
+
+### Fixed
+- **Critical: Baseline corruption during router/integration reconnects**
+  - Integration now preserves last known sensor baseline when sensors temporarily unavailable
+  - Prevents spike detection errors after network interruptions or integration reloads
+  - Adds diagnostic warning logs when baseline preservation occurs
+  - Protects against data loss during: router resets, HA restarts, integration reloads, network issues, device reboots
+  - See `ROUTER_RESET_FIX.md` for detailed explanation and prevention strategies
+
+## [4.4.7] - 2026-04-10
+
+### Fixed
+- Added missing `ideal_import_kwh_tou` and `ideal_import_kwh_non_tou` values to the early-return fallback path in the optimization calculation, preventing these sensors from showing as unavailable when the fallback is triggered (PR #4, contributor @zubir2k)
+
 ## [4.4.6] - 2026-02-28
 
 ### Fixed

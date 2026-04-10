@@ -101,7 +101,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="4.4.6",
+        sw_version="4.4.7",
     )
 
     sensors = [
@@ -1536,8 +1536,40 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         return month_changed
 
     def _create_month_bucket(self, now: datetime) -> Dict[str, Any]:
-        """Create new monthly data bucket."""
+        """Create new monthly data bucket.
+        
+        Preserves last known sensor baselines when sensors are temporarily unavailable
+        (e.g., during integration reload, router reconnect, etc.) to prevent baseline corruption.
+        """
         billing_month, billing_year = self._get_billing_period(now)
+        
+        # Get current sensor readings
+        import_reading = self._get_entity_state(self._import_entity, "Import entity", is_optional=False)
+        export_reading = self._get_entity_state(self._export_entity, "Export entity", is_optional=True)
+        
+        # Preserve last known good baseline if sensor is unavailable (returns 0)
+        # This prevents baseline corruption during integration reconnects/restarts
+        if hasattr(self, "_monthly_data") and self._monthly_data:
+            # If sensor returns 0 but we have a non-zero baseline, preserve the old baseline
+            old_import_last = self._monthly_data.get("import_last", 0.0)
+            old_export_last = self._monthly_data.get("export_last", 0.0)
+            
+            if import_reading == 0.0 and old_import_last > 0.0:
+                _LOGGER.warning(
+                    "Import sensor unavailable during month bucket creation (would return 0). "
+                    "Preserving last known baseline: %.3f kWh to prevent baseline corruption.",
+                    old_import_last
+                )
+                import_reading = old_import_last
+            
+            if export_reading == 0.0 and old_export_last > 0.0:
+                _LOGGER.warning(
+                    "Export sensor unavailable during month bucket creation (would return 0). "
+                    "Preserving last known baseline: %.3f kWh to prevent baseline corruption.",
+                    old_export_last
+                )
+                export_reading = old_export_last
+        
         return {
             "month": now.month,  # Keep calendar month for reference
             "year": now.year,
@@ -1548,8 +1580,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             "export_total": 0.0,
             "import_peak": 0.0,
             "import_offpeak": 0.0,
-            "import_last": self._get_entity_state(self._import_entity, "Import entity", is_optional=False),
-            "export_last": self._get_entity_state(self._export_entity, "Export entity", is_optional=True),
+            "import_last": import_reading,
+            "export_last": export_reading,
             "calibration": {
                 "import_baseline": 0.0,
                 "peak_baseline": 0.0,
@@ -3062,7 +3094,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "4.4.6",
+            "sw_version": "4.4.7",
         }
 
     @property

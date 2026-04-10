@@ -115,6 +115,7 @@ Thumbs.db
 
 # Development & Testing Files (not for public)
 TODO.md
+AGENTS.md
 debug_calc.py
 test_*.py
 TESTING_GUIDE.md
@@ -125,6 +126,9 @@ examples.md
 HACS_CHECKLIST.md
 CODE_REVIEW_*.md
 RELEASE_NOTES_*.md
+*_ROOT_CAUSE.md
+ROUTER_RESET_FIX.md
+FIX_SPIKE_DETECTION.md
 PLANNING_OPTIMIZATION_SENSORS.md
 TNB ToU.xlsx
 dashboards/tnb_calculator_bubble_dashboard.yaml
