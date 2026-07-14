@@ -2,6 +2,25 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [4.4.9] - 2026-07-14
+
+### Fixed
+- **Spike detection infinite rejection loop**: Sensor going offline then reconnecting
+  (router reboot, WiFi dropout, HA restart) caused delta to exceed the 10 kWh threshold,
+  resulting in permanent rejection of all subsequent readings. The system now uses a
+  **time-aware threshold** — allowed delta scales with elapsed offline time. If the sensor
+  was offline for 2 hours, it correctly accepts the catch-up energy. No data lost.
+- **Auto-recovery safety net**: After 3 consecutive rejections, the baseline silently resets
+  to the current sensor value to break infinite loops even when timestamps are stale or
+  missing.
+
+### Added
+- **"Accept Spike Reading" button**: New diagnostic button entity on the integration page
+  under Diagnostics. Shows spike status in attributes. Press to manually force-accept a
+  blocked reading as the new baseline.
+- **Spike status attributes** on `import_energy` sensor: `spike_blocked`, `spike_blocked_value`,
+  `consecutive_rejections` — visible on the sensor card for transparency.
+
 ## [4.4.8] - 2026-05-17
 
 ### Fixed

@@ -16,7 +16,7 @@ from .sensor import TNBDataCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.TEXT]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.TEXT, Platform.BUTTON]
 
 # Service schemas
 SERVICE_COMPARE_BILL_SCHEMA = vol.Schema({

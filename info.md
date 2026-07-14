@@ -22,7 +22,18 @@ A Home Assistant integration to calculate your TNB (Tenaga Nasional Berhad) elec
 - **Smart Meter Reset Handling**: Automatically detects and handles daily/monthly meter resets
 - **Verified Accuracy**: Calculations match TNB tariff templates exactly for both ToU and non-ToU
 
-## What's New in v4.4.7
+## What's New in v4.4.9
+
+### 🔧 Smarter spike detection — no more stuck readings
+
+**The problem:** If your energy sensor went offline (router reboot, WiFi dropout), the jump when it came back looked like a "spike" and got permanently rejected. Your data stopped updating forever.
+
+**The fix:**
+- **Time-aware recovery** — Accounts for how long the sensor was offline and correctly accepts catch-up energy. No data lost.
+- **Auto-reset** — If timestamps are missing, auto-recovers after 3 attempts.
+- **New "Accept Spike Reading" button** — On the integration page under Diagnostics. Press to manually accept a blocked reading.
+
+### What's New in v4.4.7
 
 ### AFA optimization sensor fix
 

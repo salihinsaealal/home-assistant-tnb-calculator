@@ -50,6 +50,11 @@
   },
   "title": "TNB Calculator",
   "entity": {
+    "button": {
+      "accept_spike_reading": {
+        "name": "Accept Spike Reading"
+      }
+    },
     "sensor": {
       "total_cost": {
         "name": "Total Cost"

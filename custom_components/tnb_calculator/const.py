@@ -14,6 +14,12 @@ DEFAULT_UPDATE_INTERVAL = 300  # 5 minutes
 # Set threshold at 10 kWh per interval to catch anomalies while allowing burst usage
 MAX_DELTA_PER_INTERVAL = 10.0  # kWh
 
+# Spike detection recovery - time-aware and consecutive rejection
+# Time-aware: allowed delta = MAX_DELTA_PER_INTERVAL * (elapsed_minutes / 5)
+# Consecutive: after MAX_CONSECUTIVE_REJECTIONS rejections, auto-reset baseline
+MAX_CONSECUTIVE_REJECTIONS = 3
+SPIKE_MIN_ELAPSED_MINUTES = 5.0
+
 # Configuration keys
 CONF_IMPORT_ENTITY = "import_entity"
 CONF_EXPORT_ENTITY = "export_entity"
@@ -21,7 +27,7 @@ CONF_CALENDARIFIC_API_KEY = "calendarific_api_key"
 CONF_COUNTRY = "country"
 CONF_YEAR = "year"
 CONF_BILLING_START_DAY = "billing_start_day"
-CONF_VERSION = "4.4.8"
+CONF_VERSION = "4.4.9"
 
 # Tariff defaults (can be overridden via service)
 DEFAULT_AFA_RATE = -0.0499             # MYR/kWh for usage >= 600 kWh (rebate as of 01/01/2026)

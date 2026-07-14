@@ -43,6 +43,8 @@ from .const import (
     BASE_SENSOR_TYPES,
     TOU_SENSOR_TYPES,
     MAX_DELTA_PER_INTERVAL,
+    MAX_CONSECUTIVE_REJECTIONS,
+    SPIKE_MIN_ELAPSED_MINUTES,
     # Tariff constants
     DEFAULT_AFA_RATE,
     DEFAULT_AFA_THRESHOLD,
@@ -101,7 +103,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="4.4.8",
+        sw_version="4.4.9",
     )
 
     sensors = [
@@ -256,6 +258,17 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                     monthly_data["billing_year"] = monthly_data["year"]
                     _LOGGER.info("Migrated monthly_data: added billing_month=%d, billing_year=%d",
                                 monthly_data["billing_month"], monthly_data["billing_year"])
+                
+                # Migration: Add spike detection fields if missing (v4.4.9+)
+                now_ts = dt_util.now().isoformat()
+                monthly_data.setdefault("import_last_ts", now_ts)
+                monthly_data.setdefault("export_last_ts", now_ts)
+                monthly_data.setdefault("import_consecutive_rejections", 0)
+                monthly_data.setdefault("export_consecutive_rejections", 0)
+                monthly_data.setdefault("import_spike_blocked", False)
+                monthly_data.setdefault("export_spike_blocked", False)
+                monthly_data.setdefault("import_spike_blocked_value", 0.0)
+                monthly_data.setdefault("export_spike_blocked_value", 0.0)
                 
                 # Migration: Add calibration structure if missing
                 if "calibration" not in monthly_data:
@@ -717,6 +730,14 @@ class TNBDataCoordinator(DataUpdateCoordinator):
 
             # Mark successful update
             self._last_successful_update = now
+
+            # Spike detection status (for button entity and sensor attributes)
+            result["import_spike_blocked"] = self._monthly_data.get("import_spike_blocked", False)
+            result["export_spike_blocked"] = self._monthly_data.get("export_spike_blocked", False)
+            result["import_spike_blocked_value"] = self._monthly_data.get("import_spike_blocked_value", 0.0)
+            result["export_spike_blocked_value"] = self._monthly_data.get("export_spike_blocked_value", 0.0)
+            result["import_consecutive_rejections"] = self._monthly_data.get("import_consecutive_rejections", 0)
+            result["export_consecutive_rejections"] = self._monthly_data.get("export_consecutive_rejections", 0)
 
             return result
 
@@ -1570,6 +1591,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
                 )
                 export_reading = old_export_last
         
+        now_ts = now.isoformat()
         return {
             "month": now.month,  # Keep calendar month for reference
             "year": now.year,
@@ -1582,6 +1604,14 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             "import_offpeak": 0.0,
             "import_last": import_reading,
             "export_last": export_reading,
+            "import_last_ts": now_ts,
+            "export_last_ts": now_ts,
+            "import_consecutive_rejections": 0,
+            "export_consecutive_rejections": 0,
+            "import_spike_blocked": False,
+            "export_spike_blocked": False,
+            "import_spike_blocked_value": 0.0,
+            "export_spike_blocked_value": 0.0,
             "calibration": {
                 "import_baseline": 0.0,
                 "peak_baseline": 0.0,
@@ -1622,40 +1652,155 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         }
 
     def _compute_delta(self, current_value: float, last_key: str) -> float:
-        """Compute delta from last reading, handling meter resets and spikes."""
+        """Compute delta from last reading, handling meter resets, offline gaps and spikes.
+
+        Three-layer spike recovery:
+        - Layer 1: Time-aware threshold — scales allowed delta by elapsed time since last
+          accepted reading. Handles sensor going offline then reconnecting.
+        - Layer 2: Consecutive rejection counter — after MAX_CONSECUTIVE_REJECTIONS,
+          silently resets baseline to current value (delta=0). Breaks infinite rejection.
+        - Layer 3: Spike-blocked flag — signals user-visible indicator and manual override.
+        """
         if not hasattr(self, "_monthly_data"):
             return 0.0
-        
+
+        # Derive associated field names from last_key (e.g. "import_last" or "export_last")
+        prefix = "import" if "import" in last_key else "export"
+        ts_key = f"{prefix}_last_ts"
+        rejections_key = f"{prefix}_consecutive_rejections"
+        blocked_key = f"{prefix}_spike_blocked"
+        blocked_val_key = f"{prefix}_spike_blocked_value"
+
         last_value = self._monthly_data.get(last_key, current_value)
         delta = current_value - last_value
-        
-        # Handle meter reset (negative delta)
+
+        # ── Case 1: Meter reset (negative delta) ──────────────────────────────
         if delta < 0:
             _LOGGER.warning(
                 "Meter reset detected for %s: previous=%.3f, current=%.3f. "
-                "Treating current value as delta.",
+                "Treating current value as new baseline (delta=0 for this interval).",
                 last_key,
                 last_value,
                 current_value,
             )
-            delta = current_value
-        
-        # Handle unrealistic spikes (likely sensor glitches)
-        if delta > MAX_DELTA_PER_INTERVAL:
-            _LOGGER.warning(
-                "Spike detected for %s: delta=%.3f kWh exceeds threshold of %.1f kWh. "
-                "Previous=%.3f, Current=%.3f. Ignoring this reading to prevent data corruption.",
-                last_key,
-                delta,
-                MAX_DELTA_PER_INTERVAL,
-                last_value,
-                current_value,
-            )
-            # Don't update last_value, so next reading will compare against valid baseline
+            self._monthly_data[last_key] = current_value
+            self._monthly_data[ts_key] = dt_util.now().isoformat()
+            self._monthly_data[rejections_key] = 0
+            self._monthly_data[blocked_key] = False
+            self._monthly_data[blocked_val_key] = 0.0
             return 0.0
-        
-        self._monthly_data[last_key] = current_value
-        return delta
+
+        # ── Compute time-aware allowed threshold (Layer 1) ────────────────────
+        last_ts_str = self._monthly_data.get(ts_key)
+        now = dt_util.now()
+
+        elapsed_minutes = SPIKE_MIN_ELAPSED_MINUTES  # default: treat as one interval
+        if last_ts_str:
+            try:
+                last_ts = dt_util.parse_datetime(last_ts_str)
+                if last_ts:
+                    elapsed = (now - last_ts).total_seconds() / 60.0
+                    elapsed_minutes = max(elapsed, SPIKE_MIN_ELAPSED_MINUTES)
+            except (ValueError, TypeError):
+                pass
+
+        intervals_elapsed = elapsed_minutes / 5.0
+        allowed_delta = intervals_elapsed * MAX_DELTA_PER_INTERVAL
+
+        # ── Case 2: Delta within time-aware allowed range → accept ────────────
+        if delta <= allowed_delta:
+            self._monthly_data[last_key] = current_value
+            self._monthly_data[ts_key] = now.isoformat()
+            self._monthly_data[rejections_key] = 0
+            self._monthly_data[blocked_key] = False
+            self._monthly_data[blocked_val_key] = 0.0
+            if elapsed_minutes > SPIKE_MIN_ELAPSED_MINUTES + 0.1:
+                _LOGGER.info(
+                    "Accepted catch-up delta for %s: %.3f kWh over %.0f minutes "
+                    "(allowed up to %.3f kWh). Sensor was offline or delayed.",
+                    last_key, delta, elapsed_minutes, allowed_delta,
+                )
+            return delta
+
+        # ── Case 3: True spike (exceeds time-aware threshold) ────────────────
+        consecutive = self._monthly_data.get(rejections_key, 0) + 1
+        self._monthly_data[rejections_key] = consecutive
+        self._monthly_data[blocked_key] = True
+        self._monthly_data[blocked_val_key] = current_value
+
+        if consecutive >= MAX_CONSECUTIVE_REJECTIONS:
+            # Layer 2: Auto-recovery — reset baseline, discard delta
+            _LOGGER.warning(
+                "Spike auto-recovery for %s after %d consecutive rejections. "
+                "Resetting baseline to %.3f kWh (delta discarded). "
+                "Future readings will accumulate correctly from this point.",
+                last_key, consecutive, current_value,
+            )
+            self._monthly_data[last_key] = current_value
+            self._monthly_data[ts_key] = now.isoformat()
+            self._monthly_data[rejections_key] = 0
+            self._monthly_data[blocked_key] = False
+            self._monthly_data[blocked_val_key] = 0.0
+            return 0.0
+        else:
+            # Still in rejection window — keep blocking
+            _LOGGER.warning(
+                "Spike detected for %s: delta=%.3f kWh exceeds time-aware threshold "
+                "of %.3f kWh (%.0f min elapsed, %d/%d rejections). "
+                "Previous=%.3f, Current=%.3f. Ignoring this reading. "
+                "Will auto-recover after %d more rejection(s).",
+                last_key, delta, allowed_delta, elapsed_minutes,
+                consecutive, MAX_CONSECUTIVE_REJECTIONS,
+                last_value, current_value,
+                MAX_CONSECUTIVE_REJECTIONS - consecutive,
+            )
+            return 0.0
+
+    async def accept_spike_reading(self) -> None:
+        """Force-accept the currently blocked spike reading as the new baseline.
+
+        Sets import_last and export_last to the blocked sensor values without
+        adding to monthly totals. Future readings will accumulate correctly
+        from this baseline. Called by the 'Accept Spike Reading' button entity.
+        """
+        if not hasattr(self, "_monthly_data"):
+            return
+
+        changed = False
+        now_ts = dt_util.now().isoformat()
+
+        for prefix in ("import", "export"):
+            blocked_key = f"{prefix}_spike_blocked"
+            blocked_val_key = f"{prefix}_spike_blocked_value"
+            last_key = f"{prefix}_last"
+            ts_key = f"{prefix}_last_ts"
+            rejections_key = f"{prefix}_consecutive_rejections"
+
+            if self._monthly_data.get(blocked_key, False):
+                blocked_value = self._monthly_data.get(blocked_val_key, 0.0)
+                if blocked_value > 0.0:
+                    _LOGGER.info(
+                        "User accepted spike reading for %s: resetting baseline "
+                        "to %.3f kWh (no energy added to totals).",
+                        last_key, blocked_value,
+                    )
+                    self._monthly_data[last_key] = blocked_value
+                    self._monthly_data[ts_key] = now_ts
+                    self._monthly_data[rejections_key] = 0
+                    self._monthly_data[blocked_key] = False
+                    self._monthly_data[blocked_val_key] = 0.0
+                    changed = True
+                else:
+                    # Blocked flag is set but value is 0 — just clear the flag
+                    self._monthly_data[blocked_key] = False
+                    self._monthly_data[blocked_val_key] = 0.0
+                    changed = True
+
+        if changed:
+            await self._save_monthly_data()
+            await self.async_request_refresh()
+        else:
+            _LOGGER.info("accept_spike_reading: no blocked readings found, nothing to accept.")
 
     # =========================================================================
     # TARIFF RATE HELPERS - Read from stored tariffs with hardcoded fallbacks
@@ -3094,7 +3239,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "4.4.8",
+            "sw_version": "4.4.9",
         }
 
     @property
@@ -3163,6 +3308,12 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
                     f"New billing start day {pending_day} will activate next billing cycle"
                 )
         
+        # Add spike detection status to import_energy sensor
+        if self._sensor_type == "import_energy":
+            attrs["spike_blocked"] = self.coordinator.data.get("import_spike_blocked", False)
+            attrs["spike_blocked_value"] = self.coordinator.data.get("import_spike_blocked_value", 0.0)
+            attrs["consecutive_rejections"] = self.coordinator.data.get("import_consecutive_rejections", 0)
+
         # Add ToU energy breakdown to relevant sensors
         if self._sensor_type in ["import_energy", "total_cost_tou"]:
             for key in ["import_peak_energy", "import_offpeak_energy"]:

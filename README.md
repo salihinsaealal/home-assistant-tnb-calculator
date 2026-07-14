@@ -18,7 +18,26 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## What's New in v4.4.8
+## What's New in v4.4.9
+
+### 🔧 Smarter spike detection — no more stuck readings
+
+This release fixes a frustrating bug where sensors that went offline (router reboot, WiFi dropout, HA restart) would permanently get stuck rejecting all new data. Here's what we fixed and what's new:
+
+**The problem:** If your energy sensor was unavailable for a while, when it came back the jump in value looked like a "spike" to the system. It would reject the reading, then reject it again on every 5-minute check, forever. Your dashboard would freeze and never update. 
+
+**The fix — three layers of protection:**
+
+1. **⏱ Time-aware recovery** — The system now accounts for *how long* the sensor was offline. If it was gone for 2 hours, it expects a bigger jump and correctly accepts the catch-up energy. No data lost.
+2. **🔄 Auto-reset safety net** — If for some reason the timestamps are also missing (e.g. corrupt data), the system auto-recovers after 3 attempts instead of staying stuck forever.
+3. **🆕 "Accept Spike Reading" button** — New button on the integration page under Diagnostics. When you see a spike is blocking data, just press it to accept the current sensor reading. Useful if you want to manually override.
+
+**New sensor attributes** on `import_energy`: `spike_blocked`, `spike_blocked_value`, `consecutive_rejections` — so you can see what's happening.
+
+**No action needed** for most users — the fix works automatically. Only use the button if you see the sensor stuck and want to force it. 
+
+<details>
+ <summary><strong>v4.4.8 release notes</strong></summary>
 
 ### Baseline protection during router/integration reconnects
 
@@ -30,6 +49,8 @@ Fixed a critical issue where sensor baselines could be corrupted during network 
 - **User action:** If currently experiencing spike detection errors, run `reset_storage` service after upgrade
 
 See `ROUTER_RESET_FIX.md` for detailed explanation and prevention strategies.
+
+</details>
 
 <details>
  <summary><strong>v4.4.7 release notes</strong></summary>
@@ -610,6 +631,7 @@ This integration is open source. Feel free to modify and share.
 
 ## Version History
 
+- v4.4.9: Smarter spike detection — time-aware recovery, auto-reset safety net, "Accept Spike Reading" button
 - v4.4.8: Fix baseline corruption during router/integration reconnects; preserve last known baseline when sensors unavailable
 - v4.4.7: Fix ideal_import_kwh_tou/non_tou unavailable on fallback path (PR #4, @zubir2k)
 - v4.4.6: KWTBB/Service Tax correctly outside NEM floor; today cost fix for solar/NEM users
