@@ -642,6 +642,7 @@ This integration is open source. Feel free to modify and share.
 ## Version History
 
 - v4.5.0: Spike indicator sensor, HA notification alert, instant fix button, smart button availability
+- scraper v3.1.0: rates.js direct fetch, fixed sign bug, daily schedule, non-blocking startup
 - v4.4.9: Smarter spike detection — time-aware recovery, auto-reset safety net, "Accept Spike Reading" button
 - v4.4.8: Fix baseline corruption during router/integration reconnects; preserve last known baseline when sensors unavailable
 - v4.4.7: Fix ideal_import_kwh_tou/non_tou unavailable on fallback path (PR #4, @zubir2k)

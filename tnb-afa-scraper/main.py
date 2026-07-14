@@ -1,18 +1,21 @@
 """
-TNB AFA Rate Scraper API v3.0
+TNB AFA Rate Scraper API v3.1.0
+
+Dual-strategy scraping:
+1. PRIMARY: Fetch rates.js directly (fast, reliable, no browser needed)
+2. FALLBACK: Playwright headless browser (for page text parsing fallback)
 
 Smart Caching Strategy:
-- Scrapes TNB website on startup (if no cache)
-- Monthly schedule: 1st of month at 6am
-- Smart skipping: Skips scrape if cache has current + next 2 months
-- Auto-retry: Retries every 6 hours on failure (max 4 attempts)
-- Data validation: Validates scraped data before caching
-- Keeps old cache if new scrape fails validation
+- Daily schedule: every day at 6am (checks if fresh data exists)
+- 24h cache TTL: re-scrapes if last scrape > 24h old
+- On failure: keeps previous cache, retries every 6h (max 4 attempts)
+- Stricter validation: rejects if <3 rates, out-of-range values, or missing month
+- Prev rate retention: if new scrape fails validation, old cache is preserved
 
 Endpoints:
 GET /           -> health check
 GET /health     -> detailed monitoring status
-GET /afa/simple -> cached current month rate
+GET /afa/simple -> cached current month rate (signed: negative=rebate, positive=surcharge)
 GET /complete   -> all rates + tariffs (cached)
 GET /refresh    -> force re-scrape
 GET /debug      -> debug info (triggers live scrape)
@@ -28,6 +31,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import aiohttp
 from fastapi import FastAPI, HTTPException
 from playwright.async_api import async_playwright
 
@@ -37,6 +41,8 @@ logger = logging.getLogger(__name__)
 
 # Cache configuration
 CACHE_FILE = Path("/app/data/afa_cache.json")
+INDEX_URL = "https://www.mytnb.com.my/tariff/index.html"
+RATES_JS_BASE = "https://www.mytnb.com.my/tariff/js/rates.js"
 AFA_URL = "https://www.mytnb.com.my/tariff/index.html#afa"
 
 # Global cache (in-memory, backed by file)
@@ -83,7 +89,7 @@ def _save_cache(data: Dict[str, Any]) -> None:
 
 def _validate_rates(all_rates: List[Dict[str, Any]]) -> Tuple[bool, str]:
     """
-    Validate scraped AFA rates.
+    Validate scraped AFA rates with stricter checks.
     
     Returns:
         Tuple of (is_valid, reason)
@@ -91,21 +97,26 @@ def _validate_rates(all_rates: List[Dict[str, Any]]) -> Tuple[bool, str]:
     if not all_rates:
         return False, "No rates found"
     
-    # Check if current month rate exists
+    # Need at least 3 rates (should always have several months)
+    if len(all_rates) < 3:
+        return False, f"Only {len(all_rates)} rates found — suspicious (need >= 3)"
+    
+    # Check all rates are in valid RM range (-2 to +2 RM/kWh)
+    for r in all_rates:
+        rate_rm = r.get("rate_rm", 0)
+        if not (-2.0 <= rate_rm <= 2.0):
+            return False, f"Rate {rate_rm} out of valid range (-2 to +2 RM/kWh)"
+    
+    # Check for current or previous month coverage
     now = datetime.now()
-    current_month_rates = [
-        r for r in all_rates 
-        if r["year"] == now.year and r["start_month"] == now.month
-    ]
+    months_covered = {(r["year"], r["start_month"]) for r in all_rates}
+    current = (now.year, now.month)
+    prev_month = now.month - 1 if now.month > 1 else 12
+    prev_year = now.year if now.month > 1 else now.year - 1
+    prev = (prev_year, prev_month)
     
-    if not current_month_rates:
-        # Check if we have previous month (might be published late)
-        logger.warning(f"Current month ({now.year}-{now.month:02d}) rate not found in scraped data")
-        # This is a warning, not a failure - TNB might publish late on 1st
-    
-    # Check if we have at least 1 rate
-    if len(all_rates) < 1:
-        return False, "Less than 1 rate found"
+    if current not in months_covered and prev not in months_covered:
+        return False, f"Neither current ({current}) nor previous ({prev}) month covered"
     
     logger.info(f"Validation passed: {len(all_rates)} rates found")
     return True, "OK"
@@ -114,6 +125,8 @@ def _validate_rates(all_rates: List[Dict[str, Any]]) -> Tuple[bool, str]:
 def _check_need_scrape() -> Tuple[bool, str]:
     """
     Check if we need to scrape based on cache status.
+    
+    24h cache TTL: re-scrapes daily.
     
     Returns:
         Tuple of (should_scrape, reason)
@@ -133,39 +146,26 @@ def _check_need_scrape() -> Tuple[bool, str]:
         if not current_month_rates:
             return True, "Missing current month rate"
     
-    # Check if we have sufficient future data (current + next 2 months)
-    if "all_rates" in _cache:
-        future_months = set()
-        for r in _cache["all_rates"]:
-            rate_date = datetime(r["year"], r["start_month"], 1)
-            if rate_date >= now:
-                future_months.add((r["year"], r["start_month"]))
-        
-        # If we have 3+ future months, we're good
-        if len(future_months) >= 3:
-            logger.info(f"Cache has {len(future_months)} future months, skipping scrape")
-            return False, f"Sufficient data ({len(future_months)} future months)"
-    
-    # Cache is too old (backup safety - 30 days)
+    # Cache is older than 24h -> re-scrape (daily refresh)
     if "last_scraped" in _cache:
         try:
             last_scraped = datetime.fromisoformat(_cache["last_scraped"])
-            days_old = (now - last_scraped).days
-            if days_old > 30:
-                return True, f"Cache older than 30 days ({days_old} days)"
+            hours_old = (now - last_scraped).total_seconds() / 3600
+            if hours_old > 24:
+                return True, f"Cache older than 24 hours ({hours_old:.0f}h old)"
         except Exception:
             return True, "Invalid last_scraped timestamp"
     
-    return False, "Cache is sufficient"
+    return False, "Cache is recent (< 24h old)"
 
 
 async def _scheduled_scraper():
     """
     Smart background scheduler:
-    - Scrape on 1st of month at 6am
+    - Scrape every day at 6am (if cache older than 24h)
     - Retry every 6 hours if failed (max 4 attempts = 24h)
-    - Skip if we have current + next 2 months in cache
     - Emergency scrape if current month is missing
+    - Preserves previous cache if new scrape fails validation
     """
     global _retry_state
     
@@ -176,18 +176,23 @@ async def _scheduled_scraper():
         should_scrape = False
         reason = ""
         
-        # Reason 1: It's the 1st of the month at 6am (primary schedule)
-        if now.day == 1 and now.hour == 6:
-            # Check if we actually need to scrape (might have sufficient data)
+        # Reason 1: It's 6am (daily primary schedule)
+        if now.hour == 6:
             need_scrape, check_reason = _check_need_scrape()
             if need_scrape:
                 should_scrape = True
-                reason = f"Monthly scheduled scrape: {check_reason}"
+                reason = f"Daily scheduled scrape: {check_reason}"
             else:
-                logger.info(f"Skipping monthly scrape: {check_reason}")
+                logger.info(f"Skipping daily scrape: {check_reason}")
         
-        # Reason 2: We have pending retries (failed scrape within 24h)
-        elif _retry_state["consecutive_failures"] > 0:
+        # Reason 2: Emergency — current month missing (checked every hour)
+        need_scrape_now, check_reason_now = _check_need_scrape()
+        if need_scrape_now and "Missing current month" in check_reason_now:
+            should_scrape = True
+            reason = f"Emergency: {check_reason_now}"
+        
+        # Reason 3: Pending retries after failed scrape
+        if not should_scrape and _retry_state["consecutive_failures"] > 0:
             last_attempt = _retry_state.get("last_attempt")
             if last_attempt:
                 hours_since = (now - last_attempt).total_seconds() / 3600
@@ -195,20 +200,11 @@ async def _scheduled_scraper():
                     should_scrape = True
                     reason = f"Retry attempt {_retry_state['consecutive_failures'] + 1}/4 (last attempt: {hours_since:.1f}h ago)"
                 elif _retry_state["consecutive_failures"] >= 4:
-                    # Max retries reached, reset and wait for next monthly schedule
-                    logger.warning("Max retries (4) reached. Will retry on next monthly schedule.")
+                    logger.warning("Max retries (4) reached. Will retry on next daily schedule.")
                     _retry_state["consecutive_failures"] = 0
         
-        # Reason 3: Missing current month rate (emergency scrape)
-        else:
-            need_scrape, check_reason = _check_need_scrape()
-            if need_scrape and "Missing current month" in check_reason:
-                should_scrape = True
-                reason = f"Emergency: {check_reason}"
-        
-        # Perform scrape if needed
         if should_scrape:
-            logger.info(f"🔄 Scrape triggered: {reason}")
+            logger.info(f"Scrape triggered: {reason}")
             _retry_state["last_attempt"] = now
             
             try:
@@ -221,16 +217,43 @@ async def _scheduled_scraper():
 
 
 async def _do_scrape_and_cache() -> Dict[str, Any]:
-    """Perform scrape and update cache with validation."""
+    """Perform scrape and update cache with validation.
+
+    Strategy (Option C):
+    1. Try rates.js direct fetch (fast, authoritative, no browser)
+    2. Fallback to Playwright page scrape
+    3. If both fail or validation fails, keep previous cache
+    """
     global _retry_state
     
     logger.info("Starting scrape...")
     scrape_start = datetime.now()
+    all_rates = []
+    tariffs = {}
+    source = "none"
     
     try:
-        body_text, debug_log = await _scrape_raw()
-        all_rates = _extract_rates(body_text)
-        tariffs = _extract_tariffs(body_text)
+        # Strategy 1: rates.js direct fetch (primary)
+        try:
+            logger.info("Attempting rates.js direct fetch...")
+            js_text = await _fetch_rates_js()
+            all_rates = _parse_fuel_by_month(js_text)
+            tariffs = _extract_tariffs_from_js(js_text)
+            source = "rates.js"
+            logger.info(f"rates.js fetch successful: {len(all_rates)} rates found")
+        except Exception as e:
+            logger.warning(f"rates.js fetch failed: {e}. Falling back to Playwright...")
+        
+        # Strategy 2: Playwright fallback (if rates.js failed)
+        if not all_rates:
+            logger.info("Attempting Playwright page scrape...")
+            body_text, debug_log = await _scrape_raw()
+            all_rates = _extract_rates(body_text)
+            tariffs = _extract_tariffs(body_text)
+            source = "playwright"
+        
+        if not all_rates:
+            raise ValueError("All scrape strategies failed: no rates extracted")
         
         # Measure scrape duration
         scrape_duration = (datetime.now() - scrape_start).total_seconds()
@@ -241,7 +264,7 @@ async def _do_scrape_and_cache() -> Dict[str, Any]:
         is_valid, validation_msg = _validate_rates(all_rates)
         
         if not is_valid:
-            logger.error(f"Scrape validation failed: {validation_msg}")
+            logger.error(f"Scrape validation failed ({source}): {validation_msg}")
             _retry_state["consecutive_failures"] += 1
             
             # Keep old cache if validation fails
@@ -249,7 +272,7 @@ async def _do_scrape_and_cache() -> Dict[str, Any]:
                 logger.warning("Keeping old cache due to validation failure")
                 return _cache
             else:
-                raise HTTPException(status_code=500, detail=f"Scrape validation failed: {validation_msg}")
+                raise ValueError(f"Scrape validation failed: {validation_msg}")
         
         now = datetime.now()
         
@@ -258,13 +281,15 @@ async def _do_scrape_and_cache() -> Dict[str, Any]:
         
         cache_data = {
             "last_scraped": now.isoformat(),
+            "source": source,
             "all_rates": all_rates,
             "tariffs": tariffs,
             "current_rate": {
-                # Store absolute value (positive) for Home Assistant compatibility
-                # TNB returns negative for rebates, but HA integration expects positive
-                "afa_rate": abs(current["rate_rm"]),
-                "afa_rate_raw": current["rate_rm"],  # Keep original for reference
+                # Pass signed value directly (negative=rebate, positive=surcharge)
+                # Integration uses: afa = import_total * afa_rate
+                # So negative reduces bill, positive increases bill — matches TNB convention
+                "afa_rate": current["rate_rm"],
+                "afa_rate_raw": current["rate_rm"],
                 "effective_date": f"{current['year']:04d}-{current['start_month']:02d}-01",
                 "period": current["period"],
                 "rate_sen": current["rate_sen"],
@@ -277,8 +302,8 @@ async def _do_scrape_and_cache() -> Dict[str, Any]:
         _retry_state["consecutive_failures"] = 0
         _retry_state["last_success"] = now
         
-        logger.info("Scrape complete in %.2fs. Found %d rates. Current rate: %.4f RM/kWh for %s", 
-                   scrape_duration, len(all_rates), cache_data["current_rate"]["afa_rate"],
+        logger.info("Scrape complete in %.2fs (source: %s). Found %d rates. Current rate: %.4f RM/kWh for %s", 
+                   scrape_duration, source, len(all_rates), cache_data["current_rate"]["afa_rate"],
                    cache_data["current_rate"]["period"])
         
         return cache_data
@@ -295,6 +320,246 @@ async def _do_scrape_and_cache() -> Dict[str, Any]:
             return _cache
         else:
             raise
+
+
+async def _fetch_rates_js() -> str:
+    """Fetch rates.js content directly from TNB website.
+
+    Two-stage fetch:
+    1. Fetch index.html to discover the precise rates.js URL (with version query param)
+    2. Fetch rates.js using the discovered URL
+
+    Falls back to unversioned URL if version extraction fails.
+
+    Returns:
+        Raw JavaScript text content of rates.js
+    """
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
+        # Stage 1: Discover versioned URL from index.html
+        rates_url = RATES_JS_BASE
+        try:
+            async with session.get(INDEX_URL) as resp:
+                resp.raise_for_status()
+                html = await resp.text()
+            match = re.search(r'src="js/rates\.js\?v=([\d.]+)"', html)
+            if match:
+                rates_url = f"{RATES_JS_BASE}?v={match.group(1)}"
+                logger.info(f"Discovered rates.js URL with version v{match.group(1)}")
+            else:
+                logger.info("No version param found in index.html, using unversioned URL")
+        except Exception as e:
+            logger.warning(f"Failed to fetch index.html for version discovery: {e}. Using unversioned URL.")
+        
+        # Stage 2: Fetch rates.js
+        async with session.get(rates_url) as resp:
+            resp.raise_for_status()
+            text = await resp.text()
+            logger.info(f"Fetched {len(text)} bytes from {rates_url}")
+            return text
+
+
+def _parse_fuel_by_month(js_text: str) -> List[Dict[str, Any]]:
+    """Parse FUEL_BY_MONTH object from rates.js.
+
+    Handles format:
+        const FUEL_BY_MONTH = {
+          "2025-07": -0.0,
+          "2026-07": +0.0359,
+          ...
+        };
+
+    Sign convention: passes rates.js value AS-IS.
+    - Negative = rebate (reduces bill)
+    - Positive = surcharge (increases bill)
+    Integration uses: afa = import_total * afa_rate
+    So signed values work correctly with the integration.
+
+    Returns:
+        List of rate dicts with year, start_month, end_month, rate_rm, rate_sen, period
+    """
+    # Extract the FUEL_BY_MONTH block using balanced brace matching
+    start_match = re.search(r'const\s+FUEL_BY_MONTH\s*=\s*\{', js_text)
+    if not start_match:
+        raise ValueError("FUEL_BY_MONTH not found in rates.js")
+    
+    block_start = start_match.end()
+    depth = 1
+    block_end = block_start
+    for i, c in enumerate(js_text[block_start:]):
+        if c == '{':
+            depth += 1
+        elif c == '}':
+            depth -= 1
+            if depth == 0:
+                block_end = block_start + i
+                break
+    
+    block = js_text[block_start:block_end]
+    
+    # Parse each "YYYY-MM": value entry
+    entries = re.findall(r'"(\d{4})-(\d{2})"\s*:\s*([+-]?\d+\.?\d*)', block)
+    
+    if not entries:
+        raise ValueError("No FUEL_BY_MONTH entries found in rates.js")
+    
+    month_names = {
+        1: "Januari", 2: "Februari", 3: "Mac", 4: "April",
+        5: "Mei", 6: "Jun", 7: "Julai", 8: "Ogos",
+        9: "September", 10: "Oktober", 11: "November", 12: "Disember",
+    }
+    
+    results = []
+    for year_str, month_str, rate_str in entries:
+        year = int(year_str)
+        month = int(month_str)
+        rate_rm = float(rate_str)
+        rate_sen = round(rate_rm * 100, 4)
+        
+        results.append({
+            "period": f"{month_names[month]} {year}",
+            "rate_sen": rate_sen,
+            "rate_rm": rate_rm,
+            "start_month": month,
+            "end_month": month,
+            "year": year,
+        })
+    
+    logger.info(f"Parsed {len(results)} AFA rates from FUEL_BY_MONTH")
+    return results
+
+
+def _extract_js_const(js_text: str, name: str) -> Optional[str]:
+    """Extract a JavaScript const block by name with balanced brace matching.
+
+    Args:
+        js_text: Full JavaScript source text
+        name: Constant name (e.g., 'DOMESTIC', 'DOMESTIC_TOU')
+
+    Returns:
+        The block content (including braces), or None if not found
+    """
+    pattern = r'const\s+' + re.escape(name) + r'\s*=\s*(\{)'
+    match = re.search(pattern, js_text)
+    if not match:
+        return None
+    
+    start = match.start(1)
+    depth = 0
+    for i, c in enumerate(js_text[start:]):
+        if c == '{':
+            depth += 1
+        elif c == '}':
+            depth -= 1
+            if depth == 0:
+                return js_text[start:start + i + 1]
+    return None
+
+
+def _extract_tariffs_from_js(js_text: str) -> Dict[str, Any]:
+    """Extract tariff components from rates.js constants.
+
+    Parses DOMESTIC, DOMESTIC_TOU, and related const blocks
+    to extract generation rates, capacity, network, retailing, and ICT tiers.
+
+    Returns same structure as _extract_tariffs() for API consistency:
+    {
+      "non_tou": { "tier1": {"generation": ...}, "tier2": {...}, "threshold_kwh": 600 },
+      "tou": { "tier1": {...}, "tier2": {...}, "threshold_kwh": 1500 },
+      "shared": { "capacity": ..., "network": ..., "retailing": ... },
+      "ict_tiers": [ ... ]
+    }
+    """
+    result: Dict[str, Any] = {}
+    
+    def _search_float(block: Optional[str], pattern: str, default: float = 0.0) -> float:
+        """Search for a float value in a JS block using regex."""
+        if block is None:
+            return default
+        match = re.search(pattern, block)
+        if match:
+            return float(match.group(1))
+        return default
+    
+    def _parse_ict_tiers(block: Optional[str]) -> List[Dict[str, Any]]:
+        """Parse INCENTIVE_TIERS array from JS block."""
+        tiers = []
+        if block is None:
+            return tiers
+        # Match pattern: { max: 200, rate: -0.25 }, { max: 250, rate: -0.245 }, ...
+        pattern = r'\{\s*max\s*:\s*(\d+)\s*,\s*rate\s*:\s*([+-]?\d+\.?\d*)\s*\}'
+        for match in re.finditer(pattern, block):
+            max_val = int(match.group(1))
+            rate_val = float(match.group(2))
+            # Calculate min_kwh from previous tier's max
+            prev_max = tiers[-1]["max_kwh"] if tiers else 0
+            tiers.append({
+                "min_kwh": prev_max + 1 if tiers else 1,
+                "max_kwh": max_val,
+                "rate_sen": rate_val * 100,
+                "rate_rm": rate_val,
+            })
+        return tiers
+    
+    # Extract JS const blocks
+    domestic = _extract_js_const(js_text, "DOMESTIC")
+    domestic_tou = _extract_js_const(js_text, "DOMESTIC_TOU")
+    
+    # === Non-ToU from DOMESTIC ===
+    non_tou = {}
+    if domestic:
+        tier1_gen = _search_float(domestic, r'tier1\s*:\s*\{[^}]*?energy\s*:\s*([\d.]+)')
+        tier2_gen = _search_float(domestic, r'tier2\s*:\s*\{[^}]*?energy\s*:\s*([\d.]+)')
+        if tier1_gen:
+            non_tou["tier1"] = {"generation": tier1_gen}
+            non_tou["tier2"] = {"generation": tier2_gen if tier2_gen else tier1_gen}
+            non_tou["threshold_kwh"] = 600
+            non_tou["note"] = "tier1 for ≤600 kWh, tier2 for >600 kWh"
+    if non_tou:
+        result["non_tou"] = non_tou
+    
+    # === ToU from DOMESTIC_TOU ===
+    tou = {}
+    if domestic_tou:
+        t1_peak = _search_float(domestic_tou, r'tier1\s*:\s*\{[^}]*?energyChargePeak\s*:\s*([\d.]+)')
+        t1_offpeak = _search_float(domestic_tou, r'tier1\s*:\s*\{[^}]*?energyChargeOffPeak\s*:\s*([\d.]+)')
+        t2_peak = _search_float(domestic_tou, r'tier2\s*:\s*\{[^}]*?energyChargePeak\s*:\s*([\d.]+)')
+        t2_offpeak = _search_float(domestic_tou, r'tier2\s*:\s*\{[^}]*?energyChargeOffPeak\s*:\s*([\d.]+)')
+        if t1_peak and t1_offpeak:
+            tou["tier1"] = {
+                "generation_peak": t1_peak,
+                "generation_offpeak": t1_offpeak,
+            }
+            tou["tier2"] = {
+                "generation_peak": t2_peak if t2_peak else t1_peak,
+                "generation_offpeak": t2_offpeak if t2_offpeak else t1_offpeak,
+            }
+            tou["threshold_kwh"] = 1500
+            tou["note"] = "tier1 for <1500 kWh, tier2 for ≥1500 kWh"
+    if tou:
+        result["tou"] = tou
+    
+    # === Shared rates from DOMESTIC ===
+    shared = {}
+    if domestic:
+        cap = _search_float(domestic, r'tier1\s*:\s*\{[^}]*?capacity\s*:\s*([\d.]+)')
+        netw = _search_float(domestic, r'tier1\s*:\s*\{[^}]*?network\s*:\s*([\d.]+)')
+        retail = _search_float(domestic, r'RETAIL_CHARGE_AMOUNT\s*:\s*([\d.]+)')
+        if cap:
+            shared["capacity"] = cap
+        if netw:
+            shared["network"] = netw
+        if retail:
+            shared["retailing"] = retail
+    if shared:
+        result["shared"] = shared
+    
+    # === ICT Tiers from DOMESTIC ===
+    if domestic:
+        ict = _parse_ict_tiers(domestic)
+        if ict:
+            result["ict_tiers"] = ict
+    
+    return result
 
 
 def _select_current_rate(all_rates: List[Dict], now: datetime) -> Dict[str, Any]:
@@ -489,29 +754,52 @@ def _extract_tariffs(text: str) -> Dict[str, Any]:
     return result
 
 
+# Background startup scrape task reference (non-blocking)
+_startup_scrape_task: Optional[asyncio.Task] = None
+
+
+async def _run_startup_scrape():
+    """Run a scrape on startup in the background.
+    
+    Non-blocking: server starts immediately, cache populates asynchronously.
+    If cache already has data, it serves stale data until refresh completes.
+    """
+    try:
+        if not _cache or "last_scraped" not in _cache:
+            logger.info("No cache found, scraping in background...")
+        else:
+            should, reason = _check_need_scrape()
+            if should:
+                logger.info(f"Cache check: {reason}. Refreshing in background...")
+            else:
+                logger.info(f"Cache is fresh ({reason}), skipping startup scrape")
+                return
+        
+        await _do_scrape_and_cache()
+    except Exception as e:
+        logger.error("Startup background scrape failed: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown logic."""
-    global _scheduler_task
+    global _scheduler_task, _startup_scrape_task
     
-    # Load existing cache
+    # Load existing cache (instant — file read, no network)
     _load_cache()
     
-    # If no cache or cache is old, scrape on startup
-    if not _cache or "last_scraped" not in _cache:
-        logger.info("No cache found, scraping on startup...")
-        try:
-            await _do_scrape_and_cache()
-        except Exception as e:
-            logger.error("Startup scrape failed: %s", e)
+    # Launch non-blocking startup scrape (server starts immediately)
+    _startup_scrape_task = asyncio.create_task(_run_startup_scrape())
     
-    # Start background scheduler
+    # Start background daily scheduler
     _scheduler_task = asyncio.create_task(_scheduled_scraper())
-    logger.info("Background scheduler started")
+    logger.info("Background scheduler started. Server ready — cache loading in background.")
     
     yield
     
     # Shutdown
+    if _startup_scrape_task and not _startup_scrape_task.done():
+        _startup_scrape_task.cancel()
     if _scheduler_task:
         _scheduler_task.cancel()
         try:
@@ -523,8 +811,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="TNB AFA Rate Scraper",
-    description="Scrapes myTNB tariff page for AFA rates with smart caching and validation",
-    version="3.0.0",
+    description="Scrapes myTNB tariff page for AFA rates with smart caching and validation. Dual-strategy: rates.js direct fetch (primary) + Playwright (fallback).",
+    version="3.1.0",
     lifespan=lifespan,
 )
 
@@ -535,9 +823,10 @@ async def root() -> Dict[str, Any]:
     return {
         "status": "ok",
         "service": "TNB AFA Rate Scraper",
-        "version": "3.0.0",
+        "version": "3.1.0",
         "cache_loaded": bool(_cache),
         "last_scraped": _cache.get("last_scraped"),
+        "source": _cache.get("source"),
     }
 
 
@@ -609,6 +898,7 @@ async def health_check() -> Dict[str, Any]:
         },
         "cache": {
             "loaded": bool(_cache),
+            "source": _cache.get("source"),
             "total_rates": len(_cache.get("all_rates", [])),
             "future_months": future_months_count,
             "last_scraped": last_scraped_str,
@@ -620,11 +910,11 @@ async def health_check() -> Dict[str, Any]:
             "hours_since_success": round(hours_since_success, 1) if hours_since_success else None,
             "last_scrape_duration_sec": round(_retry_state["last_scrape_duration"], 2),
             "rates_found_last_scrape": _retry_state["rates_found_count"],
+            "last_source": _cache.get("source"),
         },
         "next_scheduled_scrape": {
-            "day_of_month": 1,
             "hour": 6,
-            "description": "1st of each month at 6am (skips if sufficient data)",
+            "description": "Every day at 6am (skips if cache < 24h old)",
         },
     }
 
@@ -1030,19 +1320,37 @@ async def get_afa_simple() -> Dict[str, Any]:
       "effective_date": "2025-11-01",
       "last_scraped": "2025-11-28T09:00:00"
     }
+
+    Note: afa_rate is signed (negative=rebate, positive=surcharge).
     """
     if not _cache or "current_rate" not in _cache:
-        # No cache - need to scrape first
-        logger.warning("Cache miss on /afa/simple, triggering scrape...")
-        await _do_scrape_and_cache()
+        # Cache not ready yet (still loading from background startup scrape)
+        if _cache and "all_rates" in _cache:
+            # Partial cache: use all_rates to derive current rate
+            now = datetime.now()
+            current = _select_current_rate(_cache["all_rates"], now)
+            return {
+                "afa_rate": current["rate_rm"],
+                "afa_rate_raw": current["rate_rm"],
+                "effective_date": f"{current['year']:04d}-{current['start_month']:02d}-01",
+                "period": current.get("period"),
+                "last_scraped": _cache.get("last_scraped"),
+                "source": _cache.get("source", "legacy"),
+            }
+        raise HTTPException(
+            status_code=503,
+            detail="Cache not yet loaded. Server is still fetching data from TNB. Try again in a few seconds."
+        )
     
     current = _cache["current_rate"]
     
     return {
-        "afa_rate": current["afa_rate"],  # Positive value for HA
-        "afa_rate_raw": current.get("afa_rate_raw", current["afa_rate"]),  # Original (may be negative)
+        "afa_rate": current["afa_rate"],          # Signed (neg=rebate, pos=surcharge)
+        "afa_rate_raw": current.get("afa_rate_raw", current["afa_rate"]),
         "effective_date": current["effective_date"],
+        "period": current.get("period"),
         "last_scraped": _cache.get("last_scraped"),
+        "source": _cache.get("source"),
     }
 
 
@@ -1059,8 +1367,9 @@ async def refresh_all() -> Dict[str, Any]:
     
     return {
         "status": "refreshed",
-        "afa_rate": cache_data["current_rate"]["afa_rate"],  # Positive
-        "afa_rate_raw": cache_data["current_rate"].get("afa_rate_raw"),  # Original
+        "source": cache_data.get("source"),
+        "afa_rate": cache_data["current_rate"]["afa_rate"],          # Signed
+        "afa_rate_raw": cache_data["current_rate"].get("afa_rate_raw"),
         "effective_date": cache_data["current_rate"]["effective_date"],
         "last_scraped": cache_data["last_scraped"],
         "all_rates_count": len(cache_data["all_rates"]),
@@ -1073,11 +1382,14 @@ async def get_all_rates() -> Dict[str, Any]:
     Return all cached AFA rates (current + upcoming months).
     """
     if not _cache or "all_rates" not in _cache:
-        logger.warning("Cache miss on /afa/all, triggering scrape...")
-        await _do_scrape_and_cache()
+        raise HTTPException(
+            status_code=503,
+            detail="Cache not yet loaded. Server is still fetching data from TNB. Try again in a few seconds."
+        )
     
     return {
         "last_scraped": _cache.get("last_scraped"),
+        "source": _cache.get("source"),
         "current_rate": _cache.get("current_rate"),
         "all_rates": _cache.get("all_rates", []),
     }
@@ -1091,19 +1403,21 @@ async def get_complete_data() -> Dict[str, Any]:
     This endpoint provides:
     - last_scraped: When data was fetched from TNB
     - current_rate: The AFA rate applicable for the current month
-    - all_rates: All AFA rates with both raw and absolute values
+    - all_rates: All AFA rates with rate_rm (signed) and rate_rm_abs (always positive)
     - tariffs: Base tariff rates (generation/capacity/network)
     - metadata: Additional info about the data
     
-    All AFA rates include:
-    - rate_rm: Original value (negative = rebate)
-    - rate_rm_abs: Absolute value (always positive, for HA compatibility)
+    AFA rate_rm convention:
+    - Negative = rebate (reduces bill)
+    - Positive = surcharge (increases bill)
     """
     if not _cache or "all_rates" not in _cache:
-        logger.warning("Cache miss on /complete, triggering scrape...")
-        await _do_scrape_and_cache()
+        raise HTTPException(
+            status_code=503,
+            detail="Cache not yet loaded. Server is still fetching data from TNB. Try again in a few seconds."
+        )
     
-    # Enrich all_rates with absolute values
+    # Enrich all_rates with absolute values for backward compat
     enriched_rates = []
     for rate in _cache.get("all_rates", []):
         enriched = rate.copy()
@@ -1112,13 +1426,14 @@ async def get_complete_data() -> Dict[str, Any]:
     
     return {
         "last_scraped": _cache.get("last_scraped"),
+        "source": _cache.get("source"),
         "current_rate": _cache.get("current_rate"),
         "all_rates": enriched_rates,
         "tariffs": _cache.get("tariffs", {}),
         "metadata": {
-            "source": "https://www.mytnb.com.my/tariff/index.html#afa",
+            "source": "https://www.mytnb.com.my/tariff/js/rates.js (primary) | index.html (fallback)",
             "rates_count": len(enriched_rates),
-            "note": "rate_rm is original (negative=rebate), rate_rm_abs is always positive",
+            "note": "rate_rm is signed (negative=rebate, positive=surcharge); rate_rm_abs is always positive",
         },
     }
 
@@ -1127,26 +1442,42 @@ async def get_complete_data() -> Dict[str, Any]:
 async def get_debug_data() -> Dict[str, Any]:
     """Debug endpoint - performs LIVE scrape (slow) to see raw data.
     
-    Use this to study the page structure for parsing improvements.
+    Uses rates.js first, falls back to Playwright.
     """
     now = datetime.now()
-    body_text, debug_log = await _scrape_raw()
-    all_rates = _extract_rates(body_text)
-    tariffs = _extract_tariffs(body_text)
-    
-    # Find lines containing tariff-related keywords
+    source = "rates.js"
+    all_rates = []
+    tariffs = {}
+    body_text = ""
+    debug_log = []
     tariff_lines = []
-    for ln in body_text.splitlines():
-        lower = ln.lower().strip()
-        if any(kw in lower for kw in ["sen/kwj", "rm/kwj", "caj ", "kadar", "puncak", "luar puncak", "blok", "insentif"]):
-            tariff_lines.append(ln.strip())
+    
+    # Try rates.js first
+    try:
+        js_text = await _fetch_rates_js()
+        all_rates = _parse_fuel_by_month(js_text)
+        tariffs = _extract_tariffs_from_js(js_text)
+    except Exception as e:
+        source = "playwright"
+        debug_log.append(f"rates.js failed: {e}")
+        # Fallback to Playwright
+        body_text, debug_log = await _scrape_raw()
+        all_rates = _extract_rates(body_text)
+        tariffs = _extract_tariffs(body_text)
+        
+        # Find lines containing tariff-related keywords
+        for ln in body_text.splitlines():
+            lower = ln.lower().strip()
+            if any(kw in lower for kw in ["sen/kwj", "rm/kwj", "caj ", "kadar", "puncak", "luar puncak", "blok", "insentif"]):
+                tariff_lines.append(ln.strip())
     
     return {
         "current_date": now.isoformat(),
+        "source": source,
         "debug_log": debug_log,
         "afa_rates_found": all_rates,
         "tariffs_found": tariffs,
-        "tariff_lines": tariff_lines[:100],  # More lines for study
+        "tariff_lines": tariff_lines[:100],
         "body_text_length": len(body_text),
-        "body_text_full": body_text,  # Full text for thorough study
+        "body_text_full": body_text if source == "playwright" else "(rates.js source not included — use /debug?full=1 for full JS)",
     }

@@ -23,7 +23,24 @@ For detailed root cause analysis, see `SPIKE_ROOT_CAUSE.md`.
 
 ## Solution Options
 
-### Option 1: Reset Storage and Let Integration Relearn (Easiest)
+### Option 1: Press the "Accept Spike Reading" Button (Easiest, v4.4.9+)
+
+**No data loss, instant fix.**
+
+1. Go to **Settings → Devices & Services → TNB Calculator**
+2. Click the integration card
+3. Scroll down to the **Diagnostics** section
+4. Press the **"Accept Spike Reading"** button
+
+The button is only active (pressable) when a spike is currently blocking data. When pressed, it resets the baseline to your sensor's current value and reloads the integration — sensors update immediately.
+
+Integration also auto-recovers after 3 consecutive rejections (~15 min) without any user action.
+
+**Note:** The button does not add the blocked energy to monthly totals. It resets the baseline so future readings accumulate correctly.
+
+---
+
+### Option 2: Reset Storage and Let Integration Relearn (v4.4.8 and earlier)
 
 **Warning:** This clears all monthly data.
 
@@ -42,7 +59,7 @@ After reset:
 
 ---
 
-### Option 2: Use Calibration Service (Preserves Data)
+### Option 3: Use Calibration Service (Preserves Data)
 
 Set the integration's baseline to match your current sensor readings:
 
@@ -77,7 +94,7 @@ Settings → Devices & Services → TNB Calculator → ⋮ → Reload
 
 ---
 
-### Option 3: Manual Storage Edit (Advanced)
+### Option 4: Manual Storage Edit (Advanced)
 
 **Warning:** Edit while Home Assistant is stopped. Backup first.
 
@@ -158,13 +175,17 @@ The spike detection sees: `12515 - 0 = 12515 kWh` in 5 minutes → impossible �
 
 ## Recommended Approach
 
-**For immediate fix with minimal disruption:**
+**For v4.4.9+ users:**
 
-Use **Option 1** (reset storage) if you're early in the billing cycle.
+Use **Option 1** (Accept Spike Reading button) — no data loss, instant fix, no configuration needed.
 
-Use **Option 2** (calibration service) if you want to preserve some monthly data and are comfortable setting values manually.
+**For earlier versions or if the button doesn't resolve it:**
 
-Use **Option 3** (manual edit) only if you need to preserve exact monthly totals and know your way around JSON files.
+Use **Option 2** (reset storage) if you're early in the billing cycle.
+
+Use **Option 3** (calibration service) if you want to preserve some monthly data and are comfortable setting values manually.
+
+Use **Option 4** (manual edit) only if you need to preserve exact monthly totals and know your way around JSON files.
 
 ---
 

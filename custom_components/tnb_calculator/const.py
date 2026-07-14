@@ -30,7 +30,7 @@ CONF_BILLING_START_DAY = "billing_start_day"
 CONF_VERSION = "4.5.0"
 
 # Tariff defaults (can be overridden via service)
-DEFAULT_AFA_RATE = -0.0499             # MYR/kWh for usage >= 600 kWh (rebate as of 01/01/2026)
+DEFAULT_AFA_RATE = +0.0359             # MYR/kWh for usage >= 600 kWh (surcharge as of 01/07/2026)
 DEFAULT_AFA_THRESHOLD = 600        # kWh threshold for AFA
 DEFAULT_RETAILING_CHARGE = 10.0    # MYR fixed charge for usage > 600 kWh
 
