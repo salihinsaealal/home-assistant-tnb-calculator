@@ -20,7 +20,7 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ## What's New in v4.4.9
 
-### 🔧 Smarter spike detection — no more stuck readings
+### Smarter spike detection — no more stuck readings
 
 This release fixes a frustrating bug where sensors that went offline (router reboot, WiFi dropout, HA restart) would permanently get stuck rejecting all new data. Here's what we fixed and what's new:
 
