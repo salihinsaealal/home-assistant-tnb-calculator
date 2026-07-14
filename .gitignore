@@ -132,6 +132,9 @@ FIX_SPIKE_DETECTION.md
 PLANNING_OPTIMIZATION_SENSORS.md
 TNB ToU.xlsx
 SESSION_MEMORY.md
+ROUTER_RESET_FIX.md
+SPIKE_ROOT_CAUSE.md
+FIX_SPIKE_DETECTION.md
 dashboards/tnb_calculator_bubble_dashboard.yaml
 dashboards/tnb_calculator_bubble_modern.yaml
 
