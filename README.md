@@ -28,9 +28,9 @@ This release fixes a frustrating bug where sensors that went offline (router reb
 
 **The fix — three layers of protection:**
 
-1. **⏱ Time-aware recovery** — The system now accounts for *how long* the sensor was offline. If it was gone for 2 hours, it expects a bigger jump and correctly accepts the catch-up energy. No data lost.
-2. **🔄 Auto-reset safety net** — If for some reason the timestamps are also missing (e.g. corrupt data), the system auto-recovers after 3 attempts instead of staying stuck forever.
-3. **🆕 "Accept Spike Reading" button** — New button on the integration page under Diagnostics. When you see a spike is blocking data, just press it to accept the current sensor reading. Useful if you want to manually override.
+1. **Time-aware recovery** — The system now accounts for *how long* the sensor was offline. If it was gone for 2 hours, it expects a bigger jump and correctly accepts the catch-up energy. No data lost.
+2. **Auto-reset safety net** — If for some reason the timestamps are also missing (e.g. corrupt data), the system auto-recovers after 3 attempts instead of staying stuck forever.
+3. **"Accept Spike Reading" button** — New button on the integration page under Diagnostics. When you see a spike is blocking data, just press it to accept the current sensor reading. Useful if you want to manually override.
 
 **New sensor attributes** on `import_energy`: `spike_blocked`, `spike_blocked_value`, `consecutive_rejections` — so you can see what's happening.
 
