@@ -49,6 +49,16 @@ class TNBAcceptSpikeButton(CoordinatorEntity, ButtonEntity):
         }
 
     @property
+    def available(self) -> bool:
+        """Button is only pressable when a spike is currently blocked."""
+        if self.coordinator.data is None:
+            return False
+        return (
+            self.coordinator.data.get("import_spike_blocked", False)
+            or self.coordinator.data.get("export_spike_blocked", False)
+        )
+
+    @property
     def extra_state_attributes(self) -> Dict[str, Any]:
         """Return spike status attributes for user visibility."""
         data = self.coordinator.data or {}
@@ -62,6 +72,8 @@ class TNBAcceptSpikeButton(CoordinatorEntity, ButtonEntity):
         }
 
     async def async_press(self) -> None:
-        """Handle button press — accept blocked spike reading as new baseline."""
+        """Handle button press — accept blocked spike reading and reload integration."""
         _LOGGER.info("Accept Spike Reading button pressed.")
         await self.coordinator.accept_spike_reading()
+        # Reload integration so sensor coordinator picks up storage change immediately
+        await self.hass.config_entries.async_reload(self._config_entry.entry_id)

@@ -2,6 +2,25 @@
 
 All notable changes to TNB Calculator will be documented in this file.
 
+## [4.5.0] - 2026-07-14
+
+### Added
+- **Spike indicator sensor** (`sensor.tnb_calculator_spike_detected`): New diagnostic sensor
+  that shows `on` when a spike is currently blocking data, `off` when all clear. Visible on
+  the integration page under Diagnostics.
+- **Persistent notification**: HA now fires an alert banner when a spike is first detected,
+  with details on which sensor is blocked and steps to resolve. Notification auto-dismisses
+  when the spike is resolved.
+- **Smart button availability**: The "Accept Spike Reading" button is now greyed out
+  (unavailable) when no spike is active. It becomes pressable only when a spike is actually
+  blocking data.
+
+### Fixed
+- **Button now takes effect immediately**: Previously, pressing "Accept Spike Reading"
+  required waiting up to 5 minutes for the sensors to reflect the change (due to
+  dual-coordinator architecture). Now triggers an integration reload so sensor values
+  update instantly.
+
 ## [4.4.9] - 2026-07-14
 
 ### Fixed

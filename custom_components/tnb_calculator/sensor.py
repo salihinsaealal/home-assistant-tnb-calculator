@@ -103,7 +103,7 @@ async def async_setup_entry(
         name=DEFAULT_NAME,
         manufacturer="Cikgu Saleh",
         model="TNB Calculator",
-        sw_version="4.4.9",
+        sw_version="4.5.0",
     )
 
     sensors = [
@@ -196,6 +196,7 @@ class TNBDataCoordinator(DataUpdateCoordinator):
         self._validation_errors: list[str] = []
         self._last_validation_status: str = "OK"
         self._nem_credit_balance_kwh: float = 0.0  # Persistent NEM excess rolling balance
+        self._spike_notification_sent: bool = False  # Track if spike notification was sent
         
         # Tariff overrides (loaded from storage, can be set via service)
         self._tariff_overrides: Dict[str, Any] = {
@@ -738,6 +739,64 @@ class TNBDataCoordinator(DataUpdateCoordinator):
             result["export_spike_blocked_value"] = self._monthly_data.get("export_spike_blocked_value", 0.0)
             result["import_consecutive_rejections"] = self._monthly_data.get("import_consecutive_rejections", 0)
             result["export_consecutive_rejections"] = self._monthly_data.get("export_consecutive_rejections", 0)
+            result["spike_detected"] = (
+                "on"
+                if (
+                    self._monthly_data.get("import_spike_blocked", False)
+                    or self._monthly_data.get("export_spike_blocked", False)
+                )
+                else "off"
+            )
+
+            # Persistent notification: alert user when spike is first detected
+            spike_active = (
+                self._monthly_data.get("import_spike_blocked", False)
+                or self._monthly_data.get("export_spike_blocked", False)
+            )
+
+            if spike_active and not self._spike_notification_sent:
+                self._spike_notification_sent = True
+                import_blocked = self._monthly_data.get("import_spike_blocked", False)
+                export_blocked = self._monthly_data.get("export_spike_blocked", False)
+                import_blocked_val = self._monthly_data.get("import_spike_blocked_value", 0.0)
+                export_blocked_val = self._monthly_data.get("export_spike_blocked_value", 0.0)
+                import_rejections = self._monthly_data.get("import_consecutive_rejections", 0)
+                lines = []
+                if import_blocked:
+                    lines.append(f"**Import blocked:** Yes — {import_blocked_val:.1f} kWh pending")
+                if export_blocked:
+                    lines.append(f"**Export blocked:** Yes — {export_blocked_val:.1f} kWh pending")
+                lines.append(f"**Rejections:** {import_rejections}")
+                lines.append("")
+                lines.append("The system will auto-recover after 3 rejections (~15 min).")
+                lines.append("Or go to **Settings → Devices & Services → TNB Calculator → Diagnostics**")
+                lines.append("and press **Accept Spike Reading** to resolve immediately.")
+                self.hass.async_create_task(
+                    self.hass.services.async_call(
+                        "persistent_notification",
+                        "create",
+                        {
+                            "title": "TNB Calculator — Spike Detected",
+                            "message": "\n".join(lines),
+                            "notification_id": "tnb_spike_detected",
+                        },
+                    )
+                )
+                _LOGGER.warning(
+                    "Spike notification sent: import_blocked=%s (%.2f kWh), export_blocked=%s (%.2f kWh)",
+                    import_blocked, import_blocked_val, export_blocked, export_blocked_val,
+                )
+
+            elif not spike_active and self._spike_notification_sent:
+                self._spike_notification_sent = False
+                self.hass.async_create_task(
+                    self.hass.services.async_call(
+                        "persistent_notification",
+                        "dismiss",
+                        {"notification_id": "tnb_spike_detected"},
+                    )
+                )
+                _LOGGER.info("Spike resolved — notification dismissed.")
 
             return result
 
@@ -1798,7 +1857,8 @@ class TNBDataCoordinator(DataUpdateCoordinator):
 
         if changed:
             await self._save_monthly_data()
-            await self.async_request_refresh()
+            # Note: caller (button.py async_press) handles integration reload,
+            # so sensor coordinator picks up changes immediately.
         else:
             _LOGGER.info("accept_spike_reading: no blocked readings found, nothing to accept.")
 
@@ -3239,7 +3299,7 @@ class TNBSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             "name": DEFAULT_NAME,
             "manufacturer": "Cikgu Saleh",
             "model": "TNB Calculator",
-            "sw_version": "4.4.9",
+            "sw_version": "4.5.0",
         }
 
     @property

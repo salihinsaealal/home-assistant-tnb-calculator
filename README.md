@@ -18,7 +18,19 @@ Supports both Time of Use (ToU) and non-ToU tariffs with accurate monthly billin
 
 ---
 
-## What's New in v4.4.9
+## What's New in v4.5.0
+
+### Better spike visibility, instant fix button
+
+**What's new this release:**
+
+- **Spike indicator sensor** — New `sensor.tnb_calculator_spike_detected` under Diagnostics. Shows `on` when data is being blocked, `off` when all clear. Check it at a glance.
+- **HA notification alert** — When a spike is first detected, a persistent notification banner appears in your Home Assistant with details on which sensor is blocked and what to do. Auto-dismisses when resolved.
+- **Button now works instantly** — Previously, pressing "Accept Spike Reading" took up to 5 minutes to take effect. Now the integration reloads immediately — sensors update right away.
+- **Smarter button** — The "Accept Spike Reading" button is greyed out when nothing is wrong, and only becomes active when a spike is actually blocking data. No more wondering if you should press it.
+
+<details>
+ <summary><strong>v4.4.9 release notes</strong></summary>
 
 ### Smarter spike detection — no more stuck readings
 
@@ -36,8 +48,6 @@ This release fixes a frustrating bug where sensors that went offline (router reb
 
 **No action needed** for most users — the fix works automatically. Only use the button if you see the sensor stuck and want to force it. 
 
-<details>
- <summary><strong>v4.4.8 release notes</strong></summary>
 
 ### Baseline protection during router/integration reconnects
 
@@ -631,6 +641,7 @@ This integration is open source. Feel free to modify and share.
 
 ## Version History
 
+- v4.5.0: Spike indicator sensor, HA notification alert, instant fix button, smart button availability
 - v4.4.9: Smarter spike detection — time-aware recovery, auto-reset safety net, "Accept Spike Reading" button
 - v4.4.8: Fix baseline corruption during router/integration reconnects; preserve last known baseline when sensors unavailable
 - v4.4.7: Fix ideal_import_kwh_tou/non_tou unavailable on fallback path (PR #4, @zubir2k)
